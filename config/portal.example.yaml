@@ -1,0 +1,22 @@
+# 复制为 portal.yaml 后再填写真实门户信息。未知选择器必须保持 TODO，不能猜测。
+portal_url: "https://TODO-PORTAL-URL"
+allowed_domains:
+  - "TODO-ALLOWED-DOMAIN"
+employment_entry: "https://TODO-EMPLOYMENT-ENTRY"
+list_item_selector: "TODO_LIST_ITEM_SELECTOR"
+title_selector: "TODO_TITLE_SELECTOR"
+date_selector: "TODO_DATE_SELECTOR"
+detail_link_selector: "TODO_DETAIL_LINK_SELECTOR"
+next_button_selector: "TODO_NEXT_BUTTON_SELECTOR"
+detail_body_selector: "TODO_DETAIL_BODY_SELECTOR"
+attachment_selector: "TODO_ATTACHMENT_SELECTOR"
+detail_open_mode: "link"
+data_source: "page"
+api_keywords:
+  - "选调经验"
+api_notice_type: 10
+api_detail_url_template: "https://TODO-DETAIL-URL?notice_id={notice_id}&type={notice_type}"
+login_page_markers:
+  - "登录"
+  - "统一认证"
+page_interval_seconds: 1.5

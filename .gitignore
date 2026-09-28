@@ -1,0 +1,21 @@
+# Python and build output
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+build/
+dist/
+*.spec
+
+# Local portal data, login state, OCR results, and exports
+data/
+config/portal.yaml
+.env
+.env.*
+*.db
+*.sqlite*
+*.log
+
+# Generated document previews and local handoff notes
+docx_qa*/
+项目交接档案.md
