@@ -202,4 +202,3 @@ class BrowserSession:
         self.playwright=self.browser=self.context=self.page=None
         self.login_hwnd=0
 browser_session=BrowserSession()
-
