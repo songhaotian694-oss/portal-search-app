@@ -68,11 +68,11 @@ pytest -q
 
 ## 打包
 
-先安装依赖并确认 `python launcher.py` 正常，然后双击 `build_exe.bat`。脚本优先使用 `.venv` 中的 Python，PyInstaller 输出在 `dist/EmploymentPortalSearch/`。可直接运行其中的 `EmploymentPortalSearch.exe`，也可以重新双击 `创建桌面快捷方式.vbs` 让桌面快捷方式直接指向它。请保留整个打包输出文件夹，不要只移动 EXE。项目内生成的 EXE 会继续使用项目现有的 `config/` 和 `data/`；将整个打包文件夹单独复制到别处后，它会在打包文件夹旁创建自己的配置和数据目录。打包文件不会包含本地 `config/portal.yaml`、数据库或登录状态。首次运行仍需安装 Playwright Chromium 或按组织环境单独准备浏览器依赖。
+先安装 Python 依赖、pnpm 与 `frontend/` 依赖，再双击 `build_exe.bat`。脚本先编译新版前端，再使用 `.venv` 中的 Python 和 PyInstaller 打包，输出在 `dist/EmploymentPortalSearch/`。直接运行其中的 `EmploymentPortalSearch.exe` 或桌面上的“选调生信息搜索”快捷方式即可打开新版界面；顶部“本地数据工作台”保留真实数据搜索、同步和导出。请保留整个打包输出文件夹，不要只移动 EXE。项目内生成的 EXE 会继续使用项目现有的 `config/` 和 `data/`；将整个打包文件夹单独复制到别处后，它会在打包文件夹旁创建自己的配置和数据目录。打包文件不会包含本地 `config/portal.yaml`、数据库或登录状态。首次运行仍需安装 Playwright Chromium 或按组织环境单独准备浏览器依赖。
 
 ## 新版前端演示（第一阶段）
 
-`frontend/` 是独立的 React + TypeScript 前端原型，使用 Tailwind CSS、Framer Motion 和 ECharts。数据来自匿名 Mock Data，尚未连接本项目的 FastAPI 接口，也尚未替换桌面 EXE 内的旧界面。设计、交互状态和后续接入步骤见 [前端设计规划](frontend/DESIGN_PLAN.md)。
+`frontend/` 是 React + TypeScript 新版界面，使用 Tailwind CSS、Framer Motion 和 ECharts，现已打包为桌面 EXE 的默认界面。新版检索和图表仍使用匿名 Mock Data；要操作本地真实数据，请点击顶部“本地数据工作台”。设计、交互状态和后续接入步骤见 [前端设计规划](frontend/DESIGN_PLAN.md)。
 
 ```bat
 cd frontend

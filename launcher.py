@@ -1,10 +1,19 @@
 """本地启动器：复用已运行实例，避免重复启动造成端口占用错误。"""
 from __future__ import annotations
-import json,socket,threading,time,webbrowser
+import json,socket,sys,threading,time,webbrowser
 from urllib.request import urlopen
 import uvicorn
+from app.settings import DIRS,ensure_directories
+
+# A windowed PyInstaller process has no console streams. Uvicorn still needs
+# writable streams for its log handlers, so keep them in the local log folder.
+if sys.stdout is None or sys.stderr is None:
+    ensure_directories()
+    startup_log=(DIRS["logs"]/"desktop-launch.log").open("a",encoding="utf-8",buffering=1)
+    if sys.stdout is None:sys.stdout=startup_log
+    if sys.stderr is None:sys.stderr=startup_log
+
 from app.main import app
-from app.settings import ensure_directories
 from app.version import APP_VERSION
 
 HOST="127.0.0.1"

@@ -23,4 +23,6 @@
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
 @media(max-width:700px){.result-column{min-height:0}.explorer-chart.relation-chart{overflow-x:auto;scrollbar-width:thin}.explorer-chart.relation-chart .chart-canvas{min-width:700px}.explorer-chart.relation-chart:after{content:"← 横向滑动查看完整关系图 →";display:block;text-align:center;color:#8ca2ad;font-size:9px;padding:5px 0 10px}}
 .route-loading{min-height:55vh;display:grid;place-items:center;color:#688a9b;font-size:12px;letter-spacing:.12em}
+.legacy-link{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;color:#1b536b;border:1px solid #cbdde2;border-radius:6px;padding:9px 11px;font-size:11px;font-weight:650;transition:background .2s,border-color .2s}.legacy-link:hover{background:#e8f2f3;border-color:#9bbcc7}.legacy-link svg:last-child{opacity:.65}
+@media(max-width:1050px){.legacy-link{padding:8px;font-size:0;gap:0}.legacy-link svg:first-child{width:17px;height:17px}.legacy-link svg:last-child{display:none}}
 .query-token em{font-style:normal;font-size:8px;color:#86a3af;border-right:1px solid #c8d8de;padding-right:5px}
