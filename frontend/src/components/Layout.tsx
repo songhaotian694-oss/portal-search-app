@@ -13,7 +13,7 @@ export function Layout({ children }: { children: ReactNode }) {
           {children}
         </motion.main>
       </AnimatePresence>
-      <footer className="site-footer"><span>知序 ZHIXU © 2026</span><span>将分散的信息，整理成可探索的线索。</span><span>LOCAL DATA / PRIVATE</span></footer>
+      <footer className="site-footer"><span>知序 © 2026</span><span>数据保存在本机</span></footer>
     </div>
   )
 }
