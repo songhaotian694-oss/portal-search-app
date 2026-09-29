@@ -1,11 +1,26 @@
 from __future__ import annotations
 
 import re
+import shutil
+import sys
 from pathlib import Path
 from typing import Any
 import yaml
 
-ROOT = Path(__file__).resolve().parents[1]
+RESOURCE_ROOT = Path(__file__).resolve().parents[1]
+
+
+def runtime_root() -> Path:
+    if not getattr(sys, "frozen", False):
+        return RESOURCE_ROOT
+    exe_dir = Path(sys.executable).resolve().parent
+    project_dir = exe_dir.parent.parent
+    if (project_dir / "launcher.py").is_file() and (project_dir / "data").is_dir():
+        return project_dir
+    return exe_dir
+
+
+ROOT = runtime_root()
 CONFIG_DIR = ROOT / "config"
 DATA_DIR = ROOT / "data"
 DIRS = {name: DATA_DIR / name for name in ["raw_json", "raw_html", "article_text", "attachments", "extracted_text", "database", "indexes", "exports", "logs", "diagnostics"]}
@@ -23,6 +38,13 @@ DEFAULT_CONFIG: dict[str, Any] = {
 }
 
 def ensure_directories() -> None:
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    if CONFIG_DIR != RESOURCE_ROOT / "config":
+        for name in ("cities.txt", "majors.txt", "portal.example.yaml"):
+            source = RESOURCE_ROOT / "config" / name
+            destination = CONFIG_DIR / name
+            if source.is_file() and not destination.exists():
+                shutil.copyfile(source, destination)
     for directory in DIRS.values():
         directory.mkdir(parents=True, exist_ok=True)
         keep = directory / ".gitkeep"

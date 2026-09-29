@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from ..database import db
 from ..models import SyncRequest
-from ..settings import ROOT,DIRS,load_config,is_allowed_url
+from ..settings import RESOURCE_ROOT,DIRS,load_config,is_allowed_url
 from ..crawler.browser_session import browser_session
 from ..crawler.portal_adapter import PortalAdapter
 from ..crawler.article_downloader import save_article,save_api_article
@@ -17,7 +17,7 @@ from ..processing.field_extractor import extract_fields
 router=APIRouter(prefix="/api/sync",tags=["同步"])
 STATE={"status":"idle","current":0,"total":0,"success":0,"failed":0,"message":""}; task=None
 MOCK_CONFIG={"list_item_selector":".item","title_selector":".title","date_selector":".date","detail_link_selector":".title","next_button_selector":".next","detail_body_selector":".article-body","attachment_selector":".attachment"}
-FIX=ROOT/"tests"/"fixtures"
+FIX=RESOURCE_ROOT/"tests"/"fixtures"
 def hash_text(x:str):return hashlib.sha256(x.encode()).hexdigest()
 def make_searchable(article_id:int,item:dict):
     """正文一落盘就建立轻量本地索引，让用户无需等待后续处理即可搜索。"""

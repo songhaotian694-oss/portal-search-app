@@ -2,7 +2,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from .settings import ensure_directories,ROOT
+from .settings import ensure_directories, RESOURCE_ROOT
 from .database import db
 from .version import APP_VERSION
 from .api import auth,sync,process,search,articles,export,settings,records
@@ -15,4 +15,4 @@ for r in [auth.router,sync.router,process.router,search.router,articles.router,e
 async def dashboard():return db.stats()
 @app.get("/api/version")
 async def version():return {"version":APP_VERSION}
-app.mount("/",StaticFiles(directory=ROOT/"app"/"static",html=True),name="static")
+app.mount("/",StaticFiles(directory=RESOURCE_ROOT/"app"/"static",html=True),name="static")

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json,socket,threading,time,webbrowser
 from urllib.request import urlopen
 import uvicorn
+from app.main import app
 from app.settings import ensure_directories
 from app.version import APP_VERSION
 
@@ -27,7 +28,7 @@ def choose_port()->tuple[int,bool]:
         if port_is_free(port):return port,False
     raise RuntimeError("本机端口 8765—8774 均被占用，请关闭不需要的程序后重试。")
 
-def serve(port:int):uvicorn.run("app.main:app",host=HOST,port=port,log_level="info")
+def serve(port:int):uvicorn.run(app,host=HOST,port=port,log_level="info")
 
 def wait_until_ready(port:int,timeout:float=15.0)->bool:
     deadline=time.time()+timeout

@@ -20,7 +20,7 @@ Playwright Chromium 时也会尝试使用 Windows 中的 Microsoft Edge。
 
 推荐双击 `启动软件.vbs`，软件窗口会正常显示，不会打开黑色命令窗口。也可双击 `run.bat`，它会短暂启动后自动关闭命令窗口。程序在 8765—8774 中选择本机端口；如果本机 GUI 组件不可用，会自动用默认浏览器打开。启动错误记录在 `data/logs`。
 
-双击 `创建桌面快捷方式.vbs` 可在桌面创建带图标的“选调生信息搜索”快捷方式。图标文件位于 `assets/app-icon.ico`，同时提供 `assets/app-icon.png` 和可编辑的 `assets/app-icon.svg`。请保持快捷方式指向的项目文件夹位置不变；移动项目后重新运行创建脚本即可。
+双击 `创建桌面快捷方式.vbs` 可在桌面创建带图标的“选调生信息搜索”快捷方式。如果已打包，快捷方式会直接指向 EXE；否则指向脚本启动器。图标文件位于 `assets/app-icon.ico`，同时提供 `assets/app-icon.png` 和可编辑的 `assets/app-icon.svg`。请保持快捷方式指向的项目文件夹位置不变；移动项目或首次打包后重新运行创建脚本即可。
 
 “搜索选调生”直接查询本地结构化学生记录，可按姓名、届别、年级、学历、专业、城市或地区、就业单位和岗位检索，并查看来源与OCR证据。就业分享海报使用内置 RapidOCR（OpenCV + ONNX Runtime，本地OCR）识别，不上传图片；一篇海报包含多名学生时，每名学生会生成一条独立就业记录。门户接口能提供原图地址时直接下载原图，只有原图无法取得时才需要网页截图后识别。
 
@@ -68,4 +68,4 @@ pytest -q
 
 ## 打包
 
-先安装依赖并确认 `python launcher.py` 正常，然后双击 `build_exe.bat`。PyInstaller 输出在 `dist/EmploymentPortalSearch/`。打包后的首次运行仍需安装 Playwright Chromium 或按组织环境单独准备浏览器依赖。
+先安装依赖并确认 `python launcher.py` 正常，然后双击 `build_exe.bat`。脚本优先使用 `.venv` 中的 Python，PyInstaller 输出在 `dist/EmploymentPortalSearch/`。可直接运行其中的 `EmploymentPortalSearch.exe`，也可以重新双击 `创建桌面快捷方式.vbs` 让桌面快捷方式直接指向它。请保留整个打包输出文件夹，不要只移动 EXE。项目内生成的 EXE 会继续使用项目现有的 `config/` 和 `data/`；将整个打包文件夹单独复制到别处后，它会在打包文件夹旁创建自己的配置和数据目录。打包文件不会包含本地 `config/portal.yaml`、数据库或登录状态。首次运行仍需安装 Playwright Chromium 或按组织环境单独准备浏览器依赖。
