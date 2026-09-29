@@ -34,6 +34,9 @@ export function tokensToFilters(tokens: QueryToken[]): SearchFilters {
 
 export function freeText(query: string, tokens: QueryToken[]): string {
   let text = query
-  for (const token of tokens) text = text.replaceAll(token.value, '')
+  for (const token of tokens) {
+    if (token.facet === 'city') text = text.replaceAll(`${token.value}市`, '')
+    text = text.replaceAll(token.value, '')
+  }
   return text.replace(/查找|搜索|检索|寻找|关于|相关|收录|的|在|和|与|专业|地区|城市|岗位|经验|信息|届|年|选调|公务员|[\s，,。]+/g, '').trim()
 }

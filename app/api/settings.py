@@ -9,7 +9,7 @@ KEYS=["list_item_selector","title_selector","date_selector","detail_link_selecto
 @router.get("")
 async def get():return load_config()
 @router.put("")
-async def put(req:SettingsUpdate):return save_config(req.values)
+async def put(req:SettingsUpdate):return save_config({**load_config(),**req.values})
 @router.post("/test-selectors")
 async def test():
     if not browser_session.page:raise HTTPException(400,"请先打开浏览器并进入就业信息栏目")

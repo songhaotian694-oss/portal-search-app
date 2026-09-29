@@ -4,7 +4,7 @@ import { ArrowRight, Command, GripVertical, Search, Sparkles, X } from 'lucide-r
 import { parseQuery } from '../lib/query'
 import type { Facet, QueryToken } from '../types'
 
-const examples = ['2025届计算机专业在北京的选调经验', '上海地区的数据分析岗位', '2024届公共管理专业去向']
+const examples = ['北京选调经验', '计算机专业', '2024届选调经验']
 
 export function SmartSearch({ initialValue = '', initialPriority = [], compact = false, onSubmit }: { initialValue?: string; initialPriority?: Facet[]; compact?: boolean; onSubmit: (query: string, priority: Facet[]) => void }) {
   const [value, setValue] = useState(initialValue)

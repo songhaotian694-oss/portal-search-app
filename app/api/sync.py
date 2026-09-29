@@ -180,6 +180,11 @@ async def run(req:SyncRequest):
         if not final_message or final_message=="开始同步":final_message="同步完成"
         elif "完成" not in final_message:final_message+= "；同步完成"
         STATE.update(status="completed",message=final_message);db.finish_job(job,"completed",STATE["current"],STATE["success"],STATE["failed"])
+        if req.mode=="full":
+            from .process import start as start_processing
+            from ..models import ProcessRequest
+            await start_processing(ProcessRequest(all_local=False,build_index=False))
+            STATE["message"] += "；附件与记录识别已在后台启动"
     except Exception as e:
         STATE.update(status="failed",message=f"同步暂停：{type(e).__name__}: {e}");db.finish_job(job,"failed",STATE["current"],STATE["success"],STATE["failed"],STATE["message"])
 @router.post("/start")

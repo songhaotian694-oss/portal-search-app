@@ -21,7 +21,7 @@ export function QueryParser({ query, onComplete }: { query: string | null; onCom
       <div className="parser-track"><span className="parser-track-line" /><span className="parser-source"><Sparkles size={16} /> 查询</span><ArrowRight size={18} className="parser-arrow" /><div className="parser-nodes">
         {tokens.length ? tokens.map((token, index) => <motion.span key={token.facet} className="parser-node" initial={{ opacity: 0, y: 10, scale: 0.92 }} animate={{ opacity: index < visible ? 1 : 0.25, y: index < visible ? 0 : 10, scale: index < visible ? 1 : 0.92 }} transition={{ type: 'spring', stiffness: 360, damping: 27 }}><small>{token.label}</small>{token.value}</motion.span>) : <motion.span className="parser-node" animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 0.8 }}>关键词检索</motion.span>}
       </div></div>
-      <div className="parser-progress"><span style={{ width: `${Math.max(12, (visible / Math.max(tokens.length, 1)) * 100)}%` }} /></div><small className="parser-foot">条件将自动汇入结果页 · 演示数据</small>
+      <div className="parser-progress"><span style={{ width: `${Math.max(12, (visible / Math.max(tokens.length, 1)) * 100)}%` }} /></div><small className="parser-foot">条件将自动汇入结果页 · 本地数据</small>
     </motion.div>
   </motion.div>}</AnimatePresence>
 }

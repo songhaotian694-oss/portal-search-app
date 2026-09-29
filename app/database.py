@@ -91,7 +91,7 @@ class Database:
         with self.connection() as c:
             one=lambda q: c.execute(q).fetchone()[0]
             last=c.execute("SELECT ended_at FROM sync_jobs WHERE status='completed' ORDER BY id DESC LIMIT 1").fetchone()
-            return {"articles":one("SELECT count(*) FROM articles"),"processed":one("SELECT count(*) FROM extracted_records"),"valid_records":one("SELECT count(*) FROM experience_records"),"needs_review":one("SELECT count(*) FROM experience_records WHERE needs_review=1"),"last_sync": last[0] if last else None}
+            return {"articles":one("SELECT count(*) FROM articles"),"processed":one("SELECT count(*) FROM extracted_records"),"valid_records":one("SELECT count(*) FROM experience_records"),"needs_review":one("SELECT count(*) FROM experience_records WHERE needs_review=1"),"cities":one("SELECT count(DISTINCT city) FROM experience_records WHERE city IS NOT NULL AND city!='待人工核对'"),"majors":one("SELECT count(DISTINCT major) FROM experience_records WHERE major IS NOT NULL AND major!='待人工核对'"),"latest_year":one("SELECT max(CAST(substr(graduation_year,1,4) AS INTEGER)) FROM experience_records WHERE graduation_year GLOB '20??*'") or 0,"last_sync": last[0] if last else None}
     def target_articles_to_process(self, all_local:bool) -> list[sqlite3.Row]:
         sql="""SELECT DISTINCT a.* FROM articles a LEFT JOIN experience_records e ON e.article_id=a.id
         LEFT JOIN attachments t ON t.article_id=a.id
@@ -105,7 +105,7 @@ class Database:
             c.execute("DELETE FROM experience_records WHERE article_id=?",(article_id,))
             c.executemany("""INSERT INTO experience_records(article_id,record_no,student_name,graduation_year,grade,degree,major,city,employer,position,evidence_text,needs_review,updated_at)
             VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",[(article_id,i,*[r.get(k,"待人工核对") for k in fields],r.get("evidence_text",""),int(r.get("needs_review",True)),now()) for i,r in enumerate(records,1)])
-    def experience_rows(self,limit:int=1000)->list[dict[str,Any]]:
+    def experience_rows(self,limit:int=10000)->list[dict[str,Any]]:
         with self.connection() as c:return [dict(x) for x in c.execute("""SELECT e.*,a.title,a.published_at,a.detail_url,a.collected_at
         FROM experience_records e JOIN articles a ON a.id=e.article_id ORDER BY a.published_at DESC,e.record_no LIMIT ?""",(limit,))]
     def search_experience_rows(self,query:str="",filters:dict[str,str]|None=None,limit:int=50)->list[dict[str,Any]]:
@@ -119,7 +119,7 @@ class Database:
         for word in query.split():
             sql+=" AND ("+" OR ".join(f"e.{field} LIKE ? ESCAPE '\\'" for field in fields)+" OR a.title LIKE ? ESCAPE '\\')"
             args.extend([like(word)]*(len(fields)+1))
-        for field in ["graduation_year","degree","major","city"]:
+        for field in ["graduation_year","degree","major","city","position"]:
             if filters.get(field):
                 sql+=f" AND e.{field} LIKE ? ESCAPE '\\'";args.append(like(filters[field]))
         if filters.get("date_from"):

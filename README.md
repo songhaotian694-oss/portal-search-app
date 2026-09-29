@@ -1,8 +1,12 @@
 # 中央民族大学就业分享信息检索软件
 
-这是一个只监听 `127.0.0.1` 的本地桌面软件。它用 PyWebView 显示界面，用 Playwright 打开**可见**的 Chromium 浏览器供用户自行登录；不会保存或填写账号、密码、验证码，也不会绕过校方认证或访问无权限数据。
+这是一个只监听 `127.0.0.1` 的本地桌面软件。新版 React 界面直接检索本机 SQLite 数据库；PyWebView 提供桌面窗口。门户认证由用户本人在 Playwright 打开的可见浏览器中完成，软件不会填写账号、密码或验证码。
 
-## 安装与启动
+## 启动
+
+双击桌面“选调生信息搜索”快捷方式，或运行 `dist/EmploymentPortalSearch/EmploymentPortalSearch.exe`。新版界面包含“概览”“智能检索”“数据探索”“数据更新”四个入口，旧界面已移除。请保留完整打包文件夹，不要单独移动 EXE。
+
+## 从源代码运行
 
 需安装 Python 3.11（建议使用虚拟环境）。在本目录执行：
 
@@ -18,32 +22,23 @@ python launcher.py
 `install_browser.bat`。安装完成后重新运行 `run.bat`。程序在没有找到
 Playwright Chromium 时也会尝试使用 Windows 中的 Microsoft Edge。
 
-推荐双击 `启动软件.vbs`，软件窗口会正常显示，不会打开黑色命令窗口。也可双击 `run.bat`，它会短暂启动后自动关闭命令窗口。程序在 8765—8774 中选择本机端口；如果本机 GUI 组件不可用，会自动用默认浏览器打开。启动错误记录在 `data/logs`。
+先在 `frontend/` 运行 `pnpm install` 与 `pnpm build`，再运行 `python launcher.py`。`启动软件.vbs` 可隐藏命令窗口；程序在 8765—8774 中选择本机端口。启动日志记录在 `data/logs`。
 
 双击 `创建桌面快捷方式.vbs` 可在桌面创建带图标的“选调生信息搜索”快捷方式。如果已打包，快捷方式会直接指向 EXE；否则指向脚本启动器。图标文件位于 `assets/app-icon.ico`，同时提供 `assets/app-icon.png` 和可编辑的 `assets/app-icon.svg`。请保持快捷方式指向的项目文件夹位置不变；移动项目或首次打包后重新运行创建脚本即可。
 
-“搜索选调生”直接查询本地结构化学生记录，可按姓名、届别、年级、学历、专业、城市或地区、就业单位和岗位检索，并查看来源与OCR证据。就业分享海报使用内置 RapidOCR（OpenCV + ONNX Runtime，本地OCR）识别，不上传图片；一篇海报包含多名学生时，每名学生会生成一条独立就业记录。门户接口能提供原图地址时直接下载原图，只有原图无法取得时才需要网页截图后识别。
-
-## 先体验模拟模式
-
-1. 打开“数据同步”，点击“运行模拟同步”。这会读取 `tests/fixtures` 中的模拟列表/详情页，把原始 HTML、正文和一个本地模拟 Word 附件保存到 `data`。
-2. 处理完数据后打开“搜索选调生”，按姓名、地区或专业搜索每名学生的记录与OCR依据。
-3. 点击左侧“导出 Excel”，文件保存在 `data/exports`，包含结果、采集失败记录和待人工核对记录三个工作表。
-
-模拟数据仅为自动化开发和测试夹具，未编造真实学校接口、页面结构或真实就业信息。
+“智能检索”直接查询本地结构化学生记录，可按姓名、届别、学历、专业、地区、单位和岗位检索，并查看来源与 OCR 证据。“数据探索”根据本地记录展示专业、地区、岗位等关系。就业分享海报使用内置 RapidOCR 本地识别，不上传图片。
 
 ## 连接真实门户（必须由用户本人操作）
 
-1. 将 `config/portal.example.yaml` 复制为 `config/portal.yaml`。
-2. 填写真实 `portal_url`、`employment_entry` 和 `allowed_domains`。只能填你有正常访问权限的中央民族大学域名。
-3. 不知道 CSS 选择器时，点击“登录门户”，在打开的可见浏览器中自行认证，然后自行进入就业信息栏目。
-4. 回到软件点击“我已登录”，再进入“设置”点击“页面配置检查”。程序仅保存脱敏当前页 HTML 到 `data/diagnostics`，列出每项选择器的命中数与最多三段脱敏文本。它会明确标出仍是 `TODO`、空选择器或无效 CSS 的设置。
-5. 根据检查结果填写 `list_item_selector`、`title_selector`、`date_selector`、`detail_link_selector`、`next_button_selector`、`detail_body_selector`、`attachment_selector`，保存后可先运行“测试同步（前两页）”。确认后再运行完整/增量同步。
+1. 在“数据更新”中展开“门户设置”，填写有权限访问的登录页、就业栏目和允许域名并保存。当前机器已有本地配置时会自动加载。
+2. 点击“打开登录窗口”，在弹出的门户浏览器中自行认证，返回软件点击“我已完成登录”。
+3. 先运行“测试获取前两页”；确认同步状态正常后点击“一键更新数据”。同步与识别在后台运行，界面会持续显示进度。
+4. 在“智能检索”查看本机记录及证据；在“数据探索”查看关系图；在“数据更新”下载 Excel。
 
-未知选择器目前需要在真实登录页确认后填写：上面八个 `*_selector` 项、真实门户地址/就业栏目入口、允许域名，以及登录页识别文字 `login_page_markers`。项目故意没有猜测或硬编码它们。
+接口方式不可用时可以改为网页方式；网页方式所需的 CSS 选择器属于高级配置，可在 `config/portal.yaml` 中维护。
 
-当前 `config/portal.yaml` 已按学校就业信息列表的真实接口完成配置。数据同步
-默认采用老师演示的接口方式：登录后监听门户自身发出的 `getNoticeByPage`
+如果本机 `config/portal.yaml` 已按学校就业信息列表的真实接口完成配置，数据同步
+可采用接口方式：登录后监听门户自身发出的 `getNoticeByPage`
 请求，学习实际请求体，再用当前登录会话直接读取 `datas.tables`。每条记录的
 `notice_content` 已含通知正文，因此程序不会逐条打开详情页。原始 JSON 按
 关键词和页码保存在 `data/raw_json`，正文直接保存到 `data/article_text`，正文中
@@ -68,11 +63,11 @@ pytest -q
 
 ## 打包
 
-先安装 Python 依赖、pnpm 与 `frontend/` 依赖，再双击 `build_exe.bat`。脚本先编译新版前端，再使用 `.venv` 中的 Python 和 PyInstaller 打包，输出在 `dist/EmploymentPortalSearch/`。直接运行其中的 `EmploymentPortalSearch.exe` 或桌面上的“选调生信息搜索”快捷方式即可打开新版界面；顶部“本地数据工作台”保留真实数据搜索、同步和导出。请保留整个打包输出文件夹，不要只移动 EXE。项目内生成的 EXE 会继续使用项目现有的 `config/` 和 `data/`；将整个打包文件夹单独复制到别处后，它会在打包文件夹旁创建自己的配置和数据目录。打包文件不会包含本地 `config/portal.yaml`、数据库或登录状态。首次运行仍需安装 Playwright Chromium 或按组织环境单独准备浏览器依赖。
+先安装 Python 依赖、pnpm 与 `frontend/` 依赖，再双击 `build_exe.bat`。脚本先编译前端，再使用 PyInstaller 打包，输出在 `dist/EmploymentPortalSearch/`。请保留整个打包输出文件夹。项目内生成的 EXE 会继续使用现有的 `config/` 和 `data/`；将打包文件夹单独复制到别处后，它会在旁边创建自己的配置和数据目录。打包文件不会包含本地 `config/portal.yaml`、数据库或登录状态。
 
-## 新版前端演示（第一阶段）
+## 前端开发
 
-`frontend/` 是 React + TypeScript 新版界面，使用 Tailwind CSS、Framer Motion 和 ECharts，现已打包为桌面 EXE 的默认界面。新版检索和图表仍使用匿名 Mock Data；要操作本地真实数据，请点击顶部“本地数据工作台”。设计、交互状态和后续接入步骤见 [前端设计规划](frontend/DESIGN_PLAN.md)。
+`frontend/` 是 React + TypeScript 界面，使用 Tailwind CSS、Framer Motion 和 ECharts。所有记录来自本地 FastAPI 接口，不再使用 Mock Data。设计说明见 [前端设计规划](frontend/DESIGN_PLAN.md)。
 
 ```bat
 cd frontend
@@ -80,4 +75,4 @@ pnpm install
 pnpm dev
 ```
 
-打开 `http://127.0.0.1:5173/` 预览。`pnpm build` 用于生成静态产物。当前第一阶段只在 `frontend/src/services/api.ts` 访问演示数据，后续可在该处替换为真实 API。
+打开 `http://127.0.0.1:5173/` 预览；先启动本地 Python 服务，Vite 将 `/api` 代理到 `127.0.0.1:8765`。`pnpm build` 生成 EXE 使用的静态产物。

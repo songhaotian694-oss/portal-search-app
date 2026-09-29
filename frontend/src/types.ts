@@ -22,8 +22,9 @@ export interface ExperienceRecord {
   detail: string
   source: string
   date: string
-  confidence: number
   keywords: string[]
+  sourceUrl?: string
+  needsReview?: boolean
 }
 
 export interface SearchFilters {
@@ -40,6 +41,25 @@ export interface SearchResponse {
   records: ExperienceRecord[]
   total: number
   elapsedMs: number
+  analysis: AnalyticsSummary
+}
+
+export interface AnalyticsSummary {
+  total: number
+  needsReview: number
+  cities: [string, number][]
+  positions: [string, number][]
+  majors: [string, number][]
+  years: [string, number][]
+}
+
+export interface AnalyticsResponse {
+  summary: AnalyticsSummary
+  relations: {
+    nodes: { dimension: string; value: string; count: number }[]
+    links: { fromDimension: string; fromValue: string; toDimension: string; toValue: string; count: number }[]
+  }
+  dimensions: string[]
 }
 
 export interface Overview {
@@ -47,4 +67,7 @@ export interface Overview {
   cities: number
   majors: number
   latestYear: number
+  articles: number
+  needsReview: number
+  lastSync: string | null
 }

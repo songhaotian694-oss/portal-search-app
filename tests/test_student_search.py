@@ -30,4 +30,8 @@ def test_student_search_filters_and_literal_wildcards(tmp_path):
         {"student_name": "王乙", "graduation_year": "2024届", "grade": "2020级", "degree": "硕士生", "major": "法学", "city": "天津市", "employer": "某单位", "position": "科员"},
     ])
     assert [r["student_name"] for r in db.search_experience_rows("王", {"degree": "本科", "city": "保定"})] == ["王甲"]
+    assert [r["student_name"] for r in db.search_experience_rows("", {"position": "科员", "major": "法学"})] == ["王乙"]
+    assert db.stats()["cities"] == 2
+    assert db.stats()["majors"] == 2
+    assert db.stats()["latest_year"] == 2024
     assert db.search_experience_rows("%") == []

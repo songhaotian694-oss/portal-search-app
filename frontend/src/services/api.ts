@@ -1,51 +1,90 @@
-import { mockRecords } from '../data/mock'
 import { freeText, parseQuery, tokensToFilters } from '../lib/query'
-import type { ExperienceRecord, Facet, Overview, SearchFilters, SearchResponse } from '../types'
+import type { AnalyticsResponse, AnalyticsSummary, ExperienceRecord, Facet, Overview, SearchFilters, SearchResponse } from '../types'
 
-const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+type RawRecord = {
+  id: number; article_id: number; record_no: number; student_name: string; graduation_year: string
+  degree: string; major: string; city: string; employer: string; position: string
+  evidence_text: string; needs_review: number; title: string; published_at: string
+  detail_url: string; collected_at: string
+}
 
-/** Mock boundary: replace these methods with HTTP calls when the Python API is connected. */
+export type JobStatus = { status: string; current: number; total: number; success?: number; failed?: number; message: string }
+export type AuthStatus = { started?: boolean; logged_in: boolean; url: string; message?: string }
+export type PortalSettings = { portal_url: string; employment_entry: string; allowed_domains: string[]; data_source: string; api_keywords: string[] }
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  let response: Response
+  try { response = await fetch(path, { ...options, headers: { 'Content-Type': 'application/json', ...options?.headers } }) }
+  catch { throw new Error('无法连接本地服务，请通过软件 EXE 启动。') }
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { detail?: string }
+    throw new Error(typeof body.detail === 'string' ? body.detail : `请求失败（${response.status}）`)
+  }
+  return response.json() as Promise<T>
+}
+
+function normalize(value?: string | null): string { return value && value !== '待人工核对' ? value : '' }
+function toRecord(raw: RawRecord): ExperienceRecord {
+  const year = Number(normalize(raw.graduation_year).match(/20\d{2}/)?.[0] || 0)
+  const date = raw.published_at || raw.collected_at || ''
+  const evidence = raw.evidence_text || ''
+  return {
+    id: String(raw.id), person: normalize(raw.student_name) || `记录 ${raw.id}`, year,
+    major: normalize(raw.major) || '待核对', degree: normalize(raw.degree) || '待核对',
+    city: normalize(raw.city) || '待核对', province: normalize(raw.city) || '',
+    position: normalize(raw.position) || '待核对', organization: normalize(raw.employer) || '待核对',
+    type: '选调经验', title: raw.title || '选调经验分享',
+    excerpt: evidence.slice(0, 150) || '暂无证据文字，请查看来源文章并核对提取结果。',
+    detail: evidence || '暂无 OCR 证据文字。', source: raw.title || '本地文章', date,
+    keywords: [raw.graduation_year, raw.major, raw.city, raw.position].filter(Boolean),
+    sourceUrl: raw.detail_url, needsReview: Boolean(raw.needs_review),
+  }
+}
+
+const json = (data: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(data) })
+
 export const api = {
   async getOverview(): Promise<Overview> {
-    await wait(180)
-    return {
-      records: mockRecords.length,
-      cities: new Set(mockRecords.map(record => record.city)).size,
-      majors: new Set(mockRecords.map(record => record.major)).size,
-      latestYear: Math.max(...mockRecords.map(record => record.year)),
-    }
+    const data = await request<{ valid_records: number; cities: number; majors: number; latest_year: number; articles: number; needs_review: number; last_sync: string | null }>('/api/dashboard')
+    return { records: data.valid_records, cities: data.cities, majors: data.majors, latestYear: data.latest_year, articles: data.articles, needsReview: data.needs_review, lastSync: data.last_sync }
   },
   async getRecords(): Promise<ExperienceRecord[]> {
-    await wait(140)
-    return mockRecords
+    const data = await request<{ results: RawRecord[] }>('/api/records?limit=10000')
+    return data.results.map(toRecord)
   },
   async searchRecords(query: string, filters?: SearchFilters, priority: Facet[] = []): Promise<SearchResponse> {
     const started = performance.now()
-    await wait(220)
     const parsed = parseQuery(query)
     const merged = filters ?? tokensToFilters(parsed)
-    const remaining = freeText(query, parsed).toLowerCase()
-    const records = mockRecords.filter(record => {
-      if (merged.year && String(record.year) !== merged.year) return false
-      if (merged.dateYear && !record.date.startsWith(merged.dateYear)) return false
-      if (merged.major && !record.major.includes(merged.major)) return false
-      if (merged.city && !`${record.city}${record.province}`.includes(merged.city)) return false
-      if (merged.degree && record.degree !== merged.degree) return false
-      if (merged.type && record.type !== merged.type) return false
-      if (merged.position && !record.position.includes(merged.position)) return false
-      if (remaining && !`${record.title}${record.excerpt}${record.organization}${record.person}`.toLowerCase().includes(remaining)) return false
-      return true
+    const params = new URLSearchParams({ limit: '10000' })
+    const remaining = freeText(query, parsed)
+    if (remaining) params.set('q', remaining)
+    if (merged.year) params.set('graduation_year', merged.year)
+    if (merged.degree) params.set('degree', merged.degree)
+    if (merged.major) params.set('major', merged.major)
+    if (merged.city) params.set('city', merged.city)
+    if (merged.position) params.set('position', merged.position)
+    if (merged.dateYear) { params.set('date_from', `${merged.dateYear}-01-01`); params.set('date_to', `${merged.dateYear}-12-31`) }
+    const data = await request<{ results: RawRecord[]; summary: AnalyticsSummary }>(`/api/search?${params}`)
+    const records = data.results.map(toRecord)
+    if (priority.length) records.sort((a, b) => {
+      const score = (record: ExperienceRecord) => priority.reduce((total, key, index) => {
+        const field = key === 'dateYear' ? record.date.slice(0, 4) : String(record[key])
+        return total + (merged[key] && field.includes(merged[key]!) ? priority.length - index : 0)
+      }, 0)
+      return score(b) - score(a) || b.date.localeCompare(a.date)
     })
-    const order = priority.length ? priority : parsed.map(token => token.facet)
-    const score = (record: ExperienceRecord) => order.reduce((total, facet, index) => {
-      const value = merged[facet]
-      if (!value) return total
-      const field = facet === 'year' ? String(record.year) : facet === 'dateYear' ? record.date.slice(0, 4) : record[facet]
-      const strength = field === value ? 2 : field.includes(value) ? 1 : 0
-      const evidence = record.excerpt.includes(value) ? 1 : 0
-      return total + (order.length - index) * (strength + evidence) * 3
-    }, record.confidence)
-    records.sort((a, b) => score(b) - score(a) || b.confidence - a.confidence)
-    return { records, total: records.length, elapsedMs: Math.max(240, Math.round(performance.now() - started)) }
+    return { records, total: records.length, elapsedMs: Math.round(performance.now() - started), analysis: data.summary }
   },
+  getAnalytics: (dimensions: string[]) => request<AnalyticsResponse>(`/api/analytics?dimensions=${encodeURIComponent(dimensions.join(','))}`),
+  authStatus: () => request<AuthStatus>('/api/auth/status'),
+  openLogin: () => request<AuthStatus>('/api/auth/start', { method: 'POST' }),
+  confirmLogin: () => request<AuthStatus>('/api/auth/confirm', { method: 'POST' }),
+  syncStatus: () => request<JobStatus>('/api/sync/status'),
+  startSync: (mode: 'test' | 'full') => request<JobStatus>('/api/sync/start', json({ mode, max_pages: mode === 'full' ? 1000 : 2 })),
+  retrySync: () => request<JobStatus>('/api/sync/retry', { method: 'POST' }),
+  processStatus: () => request<JobStatus>('/api/process/status'),
+  startProcess: (allLocal: boolean) => request<JobStatus>('/api/process/start', json({ all_local: allLocal, build_index: false })),
+  getSettings: () => request<PortalSettings>('/api/settings'),
+  saveSettings: (values: Partial<PortalSettings>) => request<PortalSettings>('/api/settings', { method: 'PUT', body: JSON.stringify({ values }) }),
 }
