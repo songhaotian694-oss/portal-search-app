@@ -39,7 +39,8 @@ class BrowserSession:
     """只保留用户手工登录后的浏览器上下文，不接触账号、密码或验证码。"""
     def __init__(self): self.playwright=None; self.browser=None; self.context=None; self.page=None; self.state_path=DATA_DIR/"playwright_state.json"
     async def start(self) -> str:
-        if self.page:return self.page.url
+        if self.page and not self.page.is_closed():return self.page.url
+        if self.page:await self.close()
         from playwright.async_api import async_playwright
         self.playwright=await async_playwright().start()
         try:

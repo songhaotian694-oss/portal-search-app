@@ -138,3 +138,26 @@ body{background:#f7f8f7}
 .result-item{grid-template-columns:30px minmax(0,1fr)}
 .result-review{font-size:10px;font-weight:500;color:#916d3a;border:1px solid #e4d4b9;padding:2px 5px;margin-left:5px}
 @media(max-width:700px){.result-item{grid-template-columns:24px minmax(0,1fr)}}
+
+/* Login is the entry point until the portal session is verified. */
+.login-page{min-height:100vh;background:#f7f8f7}
+.login-brand{height:68px;border-bottom:1px solid #dfe5e7;padding:0 max(4.2vw,28px);display:flex;align-items:center;gap:14px;color:#183951}
+.login-brand strong{font-size:23px;letter-spacing:.08em}
+.login-panel{width:min(480px,calc(100% - 36px));margin:clamp(50px,10vh,110px) auto 60px;padding:38px 42px;background:#fff;border:1px solid #dbe4e7;border-radius:12px;box-shadow:0 16px 40px rgba(27,53,71,.055)}
+.login-symbol{height:44px;width:44px;display:grid;place-items:center;color:#276681;background:#eaf2f4;border-radius:9px}
+.login-panel h1{font-size:31px;color:#1d4058;margin:25px 0 11px;letter-spacing:-.03em}
+.login-panel>p{font-size:13px;line-height:1.75;color:#5d7381;margin:0}
+.login-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:32px}
+.login-actions button,.login-settings-fields>button{display:inline-flex;align-items:center;justify-content:center;gap:8px;border-radius:6px;padding:11px 15px;font-size:12px;font-weight:700}
+.login-primary,.login-settings-fields>button{border:1px solid #194763;background:#1e5570;color:#fff}
+.login-secondary{border:1px solid #d2e0e5;background:#f5f8f8;color:#315d73}
+.login-actions button:not(:disabled):hover,.login-settings-fields>button:not(:disabled):hover{filter:brightness(.94)}
+.login-panel .login-error,.login-panel .login-message{margin-top:19px;padding:11px 13px;border-left:3px solid #3d869f;background:#eef5f7;color:#345b70;font-size:12px}
+.login-panel .login-error{border-color:#bc6b62;background:#faf1ef;color:#904b42}
+.login-settings{border-top:1px solid #e3eaec;margin-top:34px;padding-top:18px}
+.login-settings-toggle{display:inline-flex;align-items:center;gap:8px;padding:4px 0;border:0;background:none;color:#486b7e;font-size:12px}
+.login-settings-fields{display:grid;gap:13px;margin-top:18px}
+.login-settings-fields label{display:grid;gap:6px;color:#4d6574;font-size:12px}
+.login-settings-fields input{width:100%;padding:10px 11px;border:1px solid #cedde2;border-radius:5px;background:#fff;color:#1e4056;font-size:12px}
+.login-settings-fields>button{justify-self:start}
+@media(max-width:700px){.login-brand{padding:0 19px}.login-panel{padding:29px 23px;margin-top:45px}.login-panel h1{font-size:27px}}

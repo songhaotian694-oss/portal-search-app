@@ -7,7 +7,7 @@ async def start():
     except Exception as e:raise HTTPException(500,f"无法启动 Chromium：{type(e).__name__}: {e}")
 @router.get("/status")
 async def status():
-    ok,url=await browser_session.is_logged_in();return {"started":browser_session.page is not None,"logged_in":ok,"url":url}
+    ok,url=await browser_session.is_logged_in();return {"started":browser_session.page is not None and not browser_session.page.is_closed(),"logged_in":ok,"url":url}
 @router.post("/confirm")
 async def confirm():
     ok,url=await browser_session.confirm();return {"logged_in":ok,"url":url,"message":"登录状态已本地保存（包含敏感 Cookie，请勿分享）。" if ok else "仍检测到登录页，请完成登录后再确认。"}
