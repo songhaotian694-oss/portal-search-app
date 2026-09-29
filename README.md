@@ -69,3 +69,15 @@ pytest -q
 ## 打包
 
 先安装依赖并确认 `python launcher.py` 正常，然后双击 `build_exe.bat`。脚本优先使用 `.venv` 中的 Python，PyInstaller 输出在 `dist/EmploymentPortalSearch/`。可直接运行其中的 `EmploymentPortalSearch.exe`，也可以重新双击 `创建桌面快捷方式.vbs` 让桌面快捷方式直接指向它。请保留整个打包输出文件夹，不要只移动 EXE。项目内生成的 EXE 会继续使用项目现有的 `config/` 和 `data/`；将整个打包文件夹单独复制到别处后，它会在打包文件夹旁创建自己的配置和数据目录。打包文件不会包含本地 `config/portal.yaml`、数据库或登录状态。首次运行仍需安装 Playwright Chromium 或按组织环境单独准备浏览器依赖。
+
+## 新版前端演示（第一阶段）
+
+`frontend/` 是独立的 React + TypeScript 前端原型，使用 Tailwind CSS、Framer Motion 和 ECharts。数据来自匿名 Mock Data，尚未连接本项目的 FastAPI 接口，也尚未替换桌面 EXE 内的旧界面。设计、交互状态和后续接入步骤见 [前端设计规划](frontend/DESIGN_PLAN.md)。
+
+```bat
+cd frontend
+pnpm install
+pnpm dev
+```
+
+打开 `http://127.0.0.1:5173/` 预览。`pnpm build` 用于生成静态产物。当前第一阶段只在 `frontend/src/services/api.ts` 访问演示数据，后续可在该处替换为真实 API。

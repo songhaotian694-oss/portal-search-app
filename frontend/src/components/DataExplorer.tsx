@@ -1,0 +1,76 @@
+import { useMemo, useState } from 'react'
+import type { EChartsOption } from 'echarts'
+import { ArrowRight, ChartNoAxesCombined, GitBranch, MoveUpRight, RotateCcw } from 'lucide-react'
+import { motion } from 'framer-motion'
+import type { ExperienceRecord } from '../types'
+import { ChartContainer } from './ChartContainer'
+
+type Dimension = 'major' | 'city' | 'position' | 'year' | 'dateYear' | 'degree'
+type View = 'relation' | 'trend' | 'region'
+const dimensions: { value: Dimension; label: string }[] = [
+  { value: 'major', label: '专业' }, { value: 'city', label: '地区' }, { value: 'position', label: '岗位' }, { value: 'year', label: '届别' }, { value: 'dateYear', label: '收录年份' }, { value: 'degree', label: '学历' },
+]
+const colors = ['#203f5d', '#2b7b96', '#787fa8']
+const read = (record: ExperienceRecord, key: Dimension) => key === 'year' ? String(record.year) + ' 届' : key === 'dateYear' ? record.date.slice(0, 4) : record[key]
+
+function relationOption(records: ExperienceRecord[], selected: string | null, dims: Dimension[]): EChartsOption {
+  const nodes = new Map<string, { name: string; itemStyle: { color: string; opacity: number } }>()
+  const links = new Map<string, { source: string; target: string; value: number }>()
+  for (const record of records) {
+    dims.forEach((dim, index) => {
+      const name = `${dim}|${read(record, dim)}`
+      nodes.set(name, { name, itemStyle: { color: colors[index], opacity: selected && selected !== name ? 0.62 : 1 } })
+      if (index > 0) {
+        const source = `${dims[index - 1]}|${read(record, dims[index - 1])}`
+        const key = `${source}=>${name}`
+        const link = links.get(key) || { source, target: name, value: 0 }
+        link.value++
+        links.set(key, link)
+      }
+    })
+  }
+  return {
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'item', formatter: (params: unknown) => { const p = params as { name?: string; value?: number }; return `${p.name?.split('|')[1] || ''}<br/>${p.value ?? ''} 条关联` } },
+    animationDuration: 650, animationDurationUpdate: 420,
+    series: [{ type: 'sankey', data: [...nodes.values()], links: [...links.values()], left: 18, right: 90, top: 20, bottom: 22, nodeWidth: 13, nodeGap: 12, draggable: false, layoutIterations: 24, emphasis: { focus: 'adjacency' }, lineStyle: { color: 'gradient', curveness: 0.53, opacity: 0.34 }, label: { color: '#263c52', fontSize: 11, formatter: (params: { name: string }) => params.name.split('|')[1] } }],
+  }
+}
+
+function barOption(records: ExperienceRecord[], dimension: Dimension): EChartsOption {
+  const counts = new Map<string, number>()
+  records.forEach(record => counts.set(read(record, dimension), (counts.get(read(record, dimension)) || 0) + 1))
+  const values = [...counts].sort((a, b) => dimension === 'year' ? a[0].localeCompare(b[0]) : b[1] - a[1]).slice(0, 10)
+  return {
+    backgroundColor: 'transparent',
+    grid: { left: 18, right: 20, top: 30, bottom: 60, containLabel: true },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    xAxis: { type: 'category', data: values.map(v => v[0]), axisTick: { show: false }, axisLabel: { color: '#687a89', interval: 0, rotate: values.length > 6 ? 35 : 0, fontSize: 11 }, axisLine: { lineStyle: { color: '#d8e0e5' } } },
+    yAxis: { type: 'value', minInterval: 1, splitLine: { lineStyle: { color: '#e8edef', type: 'dashed' } }, axisLabel: { color: '#8998a4' } },
+    animationDuration: 680, animationDurationUpdate: 400,
+    series: [{ type: 'bar', data: values.map(v => v[1]), barMaxWidth: 38, itemStyle: { color: dimension === 'year' ? '#273f65' : '#317b94', borderRadius: [3, 3, 0, 0] }, emphasis: { itemStyle: { color: '#786eaa' } } }],
+  }
+}
+
+export function DataExplorer({ records, onSearch }: { records: ExperienceRecord[]; onSearch: (query: string) => void }) {
+  const [view, setView] = useState<View>('relation')
+  const [dims, setDims] = useState<Dimension[]>(['major', 'city', 'position'])
+  const [selected, setSelected] = useState<string | null>(null)
+  const selectedRecords = useMemo(() => selected ? records.filter(record => read(record, selected.split('|')[0] as Dimension) === selected.split('|')[1]) : records, [records, selected])
+  const option = useMemo(() => view === 'relation' ? relationOption(records, selected, dims) : barOption(records, view === 'trend' ? 'year' : 'city'), [records, selected, dims, view])
+  const nodeName = selected?.split('|')[1]
+  const selectedFacet = selected?.split('|')[0]
+  function chooseNode(name: string) {
+    if (view === 'relation') setSelected(current => current === name ? null : name)
+    else setSelected(`${view === 'trend' ? 'year' : 'city'}|${name}`)
+  }
+  function chooseDimension(index: number, value: Dimension) {
+    setDims(current => { const next = [...current]; next[index] = value; return next })
+    setSelected(null)
+  }
+  return <div className="explorer-layout"><div className="explorer-main"><div className="explorer-toolbar"><div className="explorer-tabs" role="tablist" aria-label="可视化类型"><button role="tab" aria-selected={view === 'relation'} className={view === 'relation' ? 'active' : ''} onClick={() => setView('relation')}><GitBranch size={16} /> 关系网络</button><button role="tab" aria-selected={view === 'trend'} className={view === 'trend' ? 'active' : ''} onClick={() => setView('trend')}><ChartNoAxesCombined size={16} /> 届别趋势</button><button role="tab" aria-selected={view === 'region'} className={view === 'region' ? 'active' : ''} onClick={() => setView('region')}>地区分布</button></div><span className="chart-hint">悬停查看关联 · 点击节点筛选</span></div>
+    {view === 'relation' && <div className="dimension-row"><span>关系路径</span>{dims.map((dim, index) => <span className="dimension-step" key={index}>{index > 0 && <ArrowRight size={15} />}<select value={dim} aria-label={`第${index + 1}层维度`} onChange={event => chooseDimension(index, event.target.value as Dimension)}>{dimensions.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select></span>)}</div>}
+    <div className={`explorer-chart ${view === 'relation' ? 'relation-chart' : ''}`}><ChartContainer option={option} onClick={chooseNode} height={Math.max(420, Math.min(540, records.length * 16))} /></div><div className="chart-legend"><span><i style={{ background: colors[0] }} /> 起点</span><span><i style={{ background: colors[1] }} /> 关联</span><span><i style={{ background: colors[2] }} /> 终点</span><small>线条宽度表示示例记录数量</small></div></div>
+    <aside className="explorer-side"><span className="eyebrow">NODE INSPECTOR</span><h2>{selected ? '当前焦点' : '选择一个节点'}</h2><p>{selected ? `“${nodeName}”关联 ${selectedRecords.length} 条演示记录。继续查看对应的人、地区与岗位。` : '点击图中任意节点，查看该维度连接的记录。图表和记录列表会随之联动。'}</p>{selected && <button className="clear-node" onClick={() => setSelected(null)}><RotateCcw size={14} /> 清除节点选择</button>}
+      <div className="node-count"><strong>{selectedRecords.length}</strong><span>关联记录</span></div><div className="node-mini-list"><div className="node-mini-head">关联线索 <small>TOP 4</small></div>{selectedRecords.slice(0, 4).map((record, index) => <motion.button layout key={record.id} onClick={() => onSearch(`${record.year}届 ${record.major} ${record.city}`)}><span>0{index + 1}</span><div><strong>{record.person}</strong><small>{record.major} · {record.city}</small></div><MoveUpRight size={14} /></motion.button>)}</div>{selected && <button className="node-search" onClick={() => onSearch(selectedFacet === 'dateYear' ? `${nodeName}年收录的选调经验` : `${nodeName} 选调经验`)}>查看对应检索结果 <ArrowRight size={16} /></button>}</aside></div>
+}
