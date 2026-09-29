@@ -44,22 +44,26 @@ class BrowserSession:
         from playwright.async_api import async_playwright
         self.playwright=await async_playwright().start()
         try:
+            # 系统浏览器优先。某些 Windows 机器虽有下载版 Chromium，
+            # 但系统会拒绝启动该 exe（Playwright 报 spawn UNKNOWN）。
+            candidates = [("Edge", {"channel": "msedge"}), ("Chrome", {"channel": "chrome"})]
             chromium = _installed_chromium()
-            if chromium:
-                self.browser = await self.playwright.chromium.launch(
-                    headless=False, executable_path=str(chromium)
-                )
-            else:
-                # Windows 通常已有 Edge，未下载 Chromium 时先尝试使用它。
+            if chromium: candidates.append(("Chromium", {"executable_path": str(chromium)}))
+            failures = []
+            for label, options in candidates:
                 try:
                     self.browser = await self.playwright.chromium.launch(
-                        headless=False, channel="msedge"
+                        headless=False, **options
                     )
-                except Exception as edge_error:
-                    raise RuntimeError(
-                        "未找到可用浏览器。请关闭软件后双击 install_browser.bat，"
-                        "安装完成后重新启动。"
-                    ) from edge_error
+                    break
+                except Exception as exc:
+                    failures.append(f"{label}: {str(exc).splitlines()[0]}")
+            if self.browser is None:
+                raise RuntimeError(
+                    "无法打开登录浏览器。请检查 Edge 或 Chrome，"
+                    "也可运行 install_browser.bat 安装 Chromium。"
+                    + (" 尝试结果：" + "；".join(failures) if failures else "")
+                )
 
             context_options = {}
             if self.state_path.is_file():

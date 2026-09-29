@@ -4,7 +4,7 @@ router=APIRouter(prefix="/api/auth",tags=["认证"])
 @router.post("/start")
 async def start():
     try:return {"url":await browser_session.start(),"message":"已打开可见浏览器，请自行完成认证；软件不会读取账号、密码或验证码。"}
-    except Exception as e:raise HTTPException(500,f"无法启动 Chromium：{type(e).__name__}: {e}")
+    except Exception as e:raise HTTPException(500,f"无法打开登录浏览器：{str(e).splitlines()[0]}")
 @router.get("/status")
 async def status():
     ok,url=await browser_session.is_logged_in();return {"started":browser_session.page is not None and not browser_session.page.is_closed(),"logged_in":ok,"url":url}
