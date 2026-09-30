@@ -10,14 +10,37 @@ echarts.use([BarChart, SankeyChart, GridComponent, TooltipComponent, CanvasRende
 export function ChartContainer({ option, height = 440, onClick }: { option: EChartsOption; height?: number; onClick?: (name: string) => void }) {
   const container = useRef<HTMLDivElement>(null)
   const callback = useRef(onClick)
+  const latestOption = useRef(option)
+  latestOption.current = option
   useEffect(() => { callback.current = onClick }, [onClick])
   useEffect(() => {
     if (!container.current) return
-    const chart = echarts.init(container.current, undefined, { renderer: 'canvas' })
-    const observer = new ResizeObserver(() => chart.resize())
-    observer.observe(container.current)
-    chart.on('click', params => { if (params.name) callback.current?.(params.name) })
-    return () => { observer.disconnect(); chart.dispose() }
+    let chart: ReturnType<typeof echarts.init> | undefined
+    let observer: ResizeObserver | undefined
+    let resizeFrame = 0
+    let paintFrame = 0
+    // Let the destination page and navigation paint before allocating canvas
+    // and computing the first chart layout.
+    const firstFrame = requestAnimationFrame(() => {
+      paintFrame = requestAnimationFrame(() => {
+        if (!container.current) return
+        chart = echarts.init(container.current, undefined, { renderer: 'canvas' })
+        chart.setOption(latestOption.current, true)
+        observer = new ResizeObserver(() => {
+          cancelAnimationFrame(resizeFrame)
+          resizeFrame = requestAnimationFrame(() => chart?.resize())
+        })
+        observer.observe(container.current)
+        chart.on('click', params => { if (params.name) callback.current?.(params.name) })
+      })
+    })
+    return () => {
+      cancelAnimationFrame(firstFrame)
+      cancelAnimationFrame(paintFrame)
+      cancelAnimationFrame(resizeFrame)
+      observer?.disconnect()
+      chart?.dispose()
+    }
   }, [])
   useEffect(() => {
     const chart = container.current && echarts.getInstanceByDom(container.current)

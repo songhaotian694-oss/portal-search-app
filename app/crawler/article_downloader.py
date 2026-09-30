@@ -4,6 +4,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 from ..settings import DIRS,safe_filename,is_allowed_url
 from ..processing.html_parser import clean_html,extract_attachments
+from .browser_session import browser_session
 
 def digest(data: bytes)->str:return hashlib.sha256(data).hexdigest()
 async def save_article(page, item:dict, config:dict, navigate:bool=True) -> tuple[dict,list[dict]]:
@@ -23,8 +24,8 @@ async def save_article(page, item:dict, config:dict, navigate:bool=True) -> tupl
     for link in extract_attachments(html,item["detail_url"],config.get("attachment_selector","")):
         if not is_allowed_url(link["url"],config):
             attachments.append({"name":link["name"],"file_path":link["url"],"file_type":"external_link","file_hash":digest(link["url"].encode()),"is_external":True});continue
-        response=await page.request.get(link["url"]); content=await response.body(); ctype=response.headers.get("content-type","")
-        if response.status>=400 or "text/html" in ctype or b"<html" in content[:500].lower():raise ValueError("附件返回了错误页或登录页")
+        status,headers,content=await browser_session.attachment_content(page,link["url"]); ctype=headers.get("content-type","")
+        if status>=400 or "text/html" in ctype or b"<html" in content[:500].lower():raise ValueError("附件返回了错误页或登录页")
         name=safe_filename(link["name"]); path=DIRS["attachments"]/(aid+"_"+name);path.write_bytes(content)
         attachments.append({"name":name,"file_path":str(path),"file_type":path.suffix.lower(),"file_hash":digest(content)})
     return item,attachments
@@ -51,10 +52,10 @@ async def save_api_article(page, item:dict, row:dict, config:dict) -> tuple[dict
         if not is_allowed_url(url,config):
             attachments.append({"name":link["name"],"file_path":url,"file_type":"external_link","file_hash":digest(url.encode()),"is_external":True})
             continue
-        response=await page.request.get(url)
-        content_bytes=await response.body();ctype=response.headers.get("content-type","")
-        if response.status>=400 or "text/html" in ctype or b"<html" in content_bytes[:500].lower():
-            raise ValueError(f"附件下载失败：HTTP {response.status} {url}")
+        status,headers,content_bytes=await browser_session.attachment_content(page,url)
+        ctype=headers.get("content-type","")
+        if status>=400 or "text/html" in ctype or b"<html" in content_bytes[:500].lower():
+            raise ValueError(f"附件下载失败：HTTP {status} {url}")
         url_name=unquote(Path(urlparse(url).path).name)
         name=safe_filename(link["name"] or url_name or "attachment")
         if "." not in name and url_name:name=safe_filename(url_name)

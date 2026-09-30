@@ -1,0 +1,13 @@
+# Public school endpoints/selectors only. No user identifiers, tokens or cookies.
+portal_url: 'https://ca.muc.edu.cn/zfca/login?service=http%3A%2F%2Fmy.muc.edu.cn%2Fuser%2FsimpleSSOLogin#/'
+allowed_domains: [ca.muc.edu.cn, my.muc.edu.cn]
+employment_entry: 'https://my.muc.edu.cn/page/11#/notice/noticeList?lo=10&num=0'
+data_source: api
+api_keywords: ['选调经验']
+detail_body_selector: '.print_main .content'
+attachment_selector: '.print_main .accessory a[href], .print_main .content img[src]'
+detail_open_mode: click
+list_item_selector: '.contents table tbody > tr:has(td:first-child .tip_text)'
+title_selector: 'td:nth-child(1) .tip_text'
+date_selector: 'td:nth-child(4) span'
+next_button_selector: '.page .btn-next'

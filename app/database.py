@@ -52,9 +52,17 @@ class Database:
             CREATE TABLE IF NOT EXISTS chunks (
               id INTEGER PRIMARY KEY, article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
               chunk_no INTEGER, text TEXT, vector_json TEXT);
+            CREATE TABLE IF NOT EXISTS app_metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL);
             ''')
             columns={row[1] for row in c.execute("PRAGMA table_info(experience_records)")}
             if "student_name" not in columns:c.execute("ALTER TABLE experience_records ADD COLUMN student_name TEXT")
+            if "quality_json" not in columns:c.execute("ALTER TABLE experience_records ADD COLUMN quality_json TEXT NOT NULL DEFAULT '{}'")
+    def metadata(self,key:str)->str|None:
+        with self.connection() as c:
+            row=c.execute('SELECT value FROM app_metadata WHERE key=?',(key,)).fetchone()
+            return row[0] if row else None
+    def set_metadata(self,key:str,value:str)->None:
+        with self.connection() as c:c.execute('INSERT INTO app_metadata(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,value))
     def upsert_article(self, item: dict[str, Any]) -> tuple[int, bool]:
         with self.connection() as c:
             row = c.execute("SELECT id,content_hash FROM articles WHERE detail_url=?", (item["detail_url"],)).fetchone()
@@ -103,8 +111,8 @@ class Database:
         fields=["student_name","graduation_year","grade","degree","major","city","employer","position"]
         with self.connection() as c:
             c.execute("DELETE FROM experience_records WHERE article_id=?",(article_id,))
-            c.executemany("""INSERT INTO experience_records(article_id,record_no,student_name,graduation_year,grade,degree,major,city,employer,position,evidence_text,needs_review,updated_at)
-            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",[(article_id,i,*[r.get(k,"待人工核对") for k in fields],r.get("evidence_text",""),int(r.get("needs_review",True)),now()) for i,r in enumerate(records,1)])
+            c.executemany("""INSERT INTO experience_records(article_id,record_no,student_name,graduation_year,grade,degree,major,city,employer,position,evidence_text,needs_review,updated_at,quality_json)
+            VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",[(article_id,i,*[r.get(k,"待人工核对") for k in fields],r.get("evidence_text",""),int(r.get("needs_review",True)),now(),json.dumps(r.get('quality',{}),ensure_ascii=False)) for i,r in enumerate(records,1)])
     def experience_rows(self,limit:int=10000)->list[dict[str,Any]]:
         with self.connection() as c:return [dict(x) for x in c.execute("""SELECT e.*,a.title,a.published_at,a.detail_url,a.collected_at
         FROM experience_records e JOIN articles a ON a.id=e.article_id ORDER BY a.published_at DESC,e.record_no LIMIT ?""",(limit,))]

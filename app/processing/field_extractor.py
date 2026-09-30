@@ -66,124 +66,141 @@ def employment_region(employer:str,title:str)->str|None:
     if prefecture:return province+prefecture.group(1)
     county=re.match(r"(.{2,12}?(?:自治县|县))",rest)
     if county:return province+county.group(1)
+    district=re.match(r'(.{2,10}?区)',rest)
+    if district:return province+district.group(1)
     if province:return province+"（省级单位）"
     title_region=re.search(r"——([^—|]{2,12}?)(?:定向|普通|专项|集中)?选调",title)
     return title_region.group(1)+"（地区）" if title_region else None
 
-def extract_without_graduation_year(text:str,title:str)->list[dict]:
-    """兼容只写选调年份的海报；选调年份不能当作毕业届别。"""
-    lines=[line.strip() for line in text.splitlines() if line.strip()]
-    names=[]
+PIPELINE_VERSION = 'auto-20260930-1'
+MISSING = '待人工核对'  # Existing database/API compatibility; UI describes absent fields.
+RECORD_FIELDS = ('student_name','graduation_year','grade','degree','major','city','employer','position')
+DEGREE_PATTERN = r'第二学士学位(?:毕业生)?|博士(?:研究生|毕业生|生)?|硕士(?:研究生|毕业生|生)?|本科(?:毕业生|生)?|研究生'
+JOB_PATTERN = r'试用期公务员|公务员|(?:一级|二级|三级|四级)?(?:主任)?科员|党(?:总支|支部)书记助理|书记助理|主任助理|干部'
+
+
+def missing_fields(record:dict)->list[str]:
+    return [key for key in RECORD_FIELDS if not record.get(key) or record[key] in {MISSING,'待核对'}]
+
+
+def validate_ocr_record(record:dict,ocr_lines:list[dict])->dict:
+    """Withhold a field supported only by low confidence text after bounded retries."""
+    text='';ranges=[]
+    for line in ocr_lines:
+        start=len(text);text+=re.sub(r'\s+','',line['text'])
+        ranges.append((start,len(text),line['score']))
+    confidence={};withheld=[]
+    for key in RECORD_FIELDS:
+        value=record[key]
+        if value==MISSING:continue
+        needle=re.sub(r'（省级单位）|\s+','',value)
+        scores=[]
+        for match in re.finditer(re.escape(needle),text):
+            scores.append(min(score for start,end,score in ranges if start<match.end() and end>match.start()))
+        if scores:
+            confidence[key]=round(max(scores),4)
+            if max(scores)<.80:record[key]=MISSING;withheld.append(key)
+    absent=missing_fields(record)
+    record['needs_review']=bool(absent)
+    record['quality'].update(missing_fields=absent,status='partial' if absent else 'complete',confidence=confidence,withheld_fields=withheld)
+    return record
+
+
+def _name_before(lines:list[str],index:int)->str|None:
+    # Names belong to the nearest status line, never to headings further away.
+    for candidate in reversed(lines[max(0,index-6):index]):
+        if re.search(r'20\d{2}届|20\d{2}年.*选调|分享|活动|选调|扫码|腾讯|秋招|同行|就业|沙龙|校友介绍',candidate):
+            break
+        if re.search(r'20\d{2}级|学院|专业|本科|硕士|博士|研究生|级本科',candidate):continue
+        if re.fullmatch(r'[\u4e00-\u9fff·]{2,8}',candidate) and not re.search(r'公务员|助理|研究生|本科生|职级|政府|局|工会|办公室|委员会',candidate):
+            return candidate
+    return None
+
+
+def _record_from_block(lines:list[str],name:str|None)->dict:
+    compact=''.join(lines).replace('硕土','硕士')
+    graduation=first_pattern(lines[0],[r'20\d{2}届'])
+    grades=list(dict.fromkeys(re.findall(r'20\d{2}级',compact)))
+    education=[]
     for i,line in enumerate(lines):
-        if not re.fullmatch(r"[\u4e00-\u9fff·]{2,15}",line) or any(
-                word in line for word in ["分享","活动","选调","沙龙","就业","学院","公务员","助理","研究生","本科生","介绍","考试","考情","建议"]):
-            continue
-        nearby="".join(lines[i+1:i+5])
-        if re.search(r"20\d{2}级",nearby) and re.search(r"20\d{2}年.{0,35}选调生","".join(lines[i+1:i+7])):
-            names.append(i)
+        if re.search(r'20\d{2}级|学院',line):
+            education.append(line)
+            for tail in lines[i+1:i+3]:
+                if re.search(r'20\d{2}|省|市|县|局|政府|公务员|科员|书记',tail):break
+                if re.search(r'专业|本科|硕士|博士|学士|研究生',tail) or len(tail)<=8:education.append(tail)
+    academic=''.join(education).replace('硕土','硕士')
+    degree=first_pattern(academic or compact,[DEGREE_PATTERN])
+    if '研究生' in academic and '本科生' in academic and '硕士' not in academic:degree='研究生、本科生'
+    major=None
+    if grades:
+        match=re.search(re.escape(grades[0])+r'(.{2,65}?)(?:专业|第二学士学位|本科(?:生|毕业生)|硕士(?:生|研究生)|博士(?:生|研究生)|研究生)',academic)
+        if match:major=match.group(1).rsplit('学院',1)[-1]
+    if not major:
+        named_major=re.match(r'(.{2,65}?)专业',academic.rsplit('学院',1)[-1])
+        if named_major:major=named_major.group(1)
+    if not major:major=next((item for item in sorted(words('majors.txt'),key=len,reverse=True) if item in academic.rsplit('学院',1)[-1]),None)
+    employment=[]
+    for line in lines[1:]:
+        if re.search(r'扫码|腾讯|招生就业|关注我们|参加|职”等|^MUC|\d{1,2}月\d{1,2}日',line):break
+        if line in education or re.search(r'20\d{2}级|20\d{2}届|20\d{2}年.*选调生',line):continue
+        if line in {'米','来','木'} or line==name:continue
+        employment.append(line)
+    # A selected person's status may itself contain the explicit employer.
+    status=re.search(r'20\d{2}年(.+?)选调生',lines[0])
+    if status and re.search(r'局|委|办|部|厅|院|政府',status.group(1)):employment.insert(0,status.group(1))
+    organization=r'局|委|办|部|厅|院|政府|街道|乡|镇|村|社区|公司|学校|医院|联社|档案馆|工会|残联|地区|州|盟|县'
+    start=next((i for i,line in enumerate(employment) if re.search(organization,line) and not re.fullmatch(JOB_PATTERN+r'.*',line)),None)
+    employer=None;position=None
+    if start is not None:
+        if start and re.fullmatch(r'.{2,20}(?:省|自治区|市|州|县)',employment[start-1]):start-=1
+        joined=''.join(employment[start:])
+        joined=re.sub(r'^(?:现)?(?:入职|就职于|任职于)','',joined)
+        if '现任职' in joined:
+            employer,position=joined.split('现任职',1)
+        else:
+            job=re.search(r'综合职位|(?:岗位(?:为)?|职位(?:为)?)[：:]?|'+JOB_PATTERN,joined)
+            if job:
+                employer=joined[:job.start()]
+                position=joined[job.start():]
+                position=re.sub(r'^(?:岗位(?:为)?|职位(?:为)?)[：:]?','',position)
+            else:employer=joined
+        employer=(employer or '').strip('，,；;：: ') or None
+    if not position:
+        position=next((line for line in employment if re.search(JOB_PATTERN,line)),None)
+    city=employment_region(employer,'') if employer else None
+    if not city:
+        region_line=next((line for line in employment if re.fullmatch(r'.{2,30}(?:省|自治区|市|区|县)',line)),None)
+        if region_line:city=employment_region(region_line,'')
+    values=dict(student_name=name,graduation_year=graduation,grade='、'.join(grades) or None,degree=degree,major=major,city=city,employer=employer,position=position)
+    values={key:value or MISSING for key,value in values.items()}
+    absent=missing_fields(values)
+    values.update(evidence_text='\n'.join(([name] if name else [])+lines),needs_review=bool(absent),quality={'version':PIPELINE_VERSION,'missing_fields':absent,'status':'partial' if absent else 'complete'})
+    return values
+
+
+def extract_experience_records(text:str,title:str='')->list[dict]:
+    """Anchor people to explicit graduation/selection status, then join wrapped fields."""
+    if not is_experience_share(title):return []
+    lines=[re.sub(r'[ \t]+','',line.strip()) for line in text.splitlines() if line.strip()]
+    # Selection status may wrap after the year/employer; restore that anchor first.
+    for i in range(len(lines)-2,-1,-1):
+        if re.search(r'20\d{2}年',lines[i]) and '选调生' not in lines[i] and '选调生' in lines[i+1]:
+            lines[i]+=lines.pop(i+1)
+    anchors=[i for i,line in enumerate(lines) if re.search(r'20\d{2}届|20\d{2}年.{0,40}选调生',line)]
     records=[]
-    for n,start in enumerate(names):
-        block=lines[start:names[n+1] if n+1<len(names) else min(len(lines),start+12)]
-        compact="".join(block).replace("硕土","硕士")
-        grades=list(dict.fromkeys(re.findall(r"20\d{2}级",compact)))
-        grade="、".join(grades) if grades else None
-        degree=first_pattern(compact,[r"博士(?:研究生|毕业生)?",r"硕士(?:研究生|毕业生|生)?",r"本科(?:生|毕业生)?",r"研究生"])
-        if "研究生" in compact and "本科生" in compact and "硕士" not in compact:
-            degree="研究生、本科生"
-        major=None
-        if grades:
-            major_match=re.search(re.escape(grades[0])+r"(.{2,55}?)专业",compact)
-            if major_match:major=major_match.group(1).rsplit("学院",1)[-1]
-        position=next((line for line in block if "试用期公务员" in line or "科员" in line),None)
-        employer=None
-        for j,line in enumerate(block[1:],1):
-            if re.match(r"20\d{2}年",line):
-                status_text=line
-                if "选调生" not in status_text:
-                    status_text+="".join(block[j+1:j+3])
-                status=re.match(r"20\d{2}年(.+?)选调生",status_text)
-                if status and any(word in status.group(1) for word in ["局","委","办","部","厅","院","政府","纪委","监委"]):
-                    employer=status.group(1)
-            elif "选调生" in line:
-                continue
-            elif any(word in line for word in ["局","委","办","部","厅","院","政府","纪委","监委"]):
-                if "学院" not in line:employer=line
-            if employer:break
-        city=employment_region(employer,title) if employer else None
-        values={"student_name":block[0],"graduation_year":None,"grade":grade,"degree":degree,
-                "major":major,"city":city,"employer":employer,"position":position}
-        values={key:(value or "待人工核对") for key,value in values.items()}
-        values.update(evidence_text="\n".join(block[:12]),needs_review=True)
-        records.append(values)
+    for n,start in enumerate(anchors):
+        end=anchors[n+1] if n+1<len(anchors) else len(lines)
+        next_name=_name_before(lines,end) if n+1<len(anchors) else None
+        name=_name_before(lines,start)
+        name_index=next((i for i in range(start-1,max(-1,start-7),-1) if lines[i]==name),start)
+        block=[lines[start],*lines[name_index+1:start],*lines[start+1:end]]
+        if next_name and next_name in block:block=block[:block.index(next_name)]
+        record=_record_from_block(block,name)
+        # Keep an unnamed but substantive block; suppress empty/header-only guesses.
+        substantive=sum(record[key]!=MISSING for key in ('degree','major','employer','position'))
+        if substantive>=2 or (name and (substantive>=1 or record['city']!=MISSING)):records.append(record)
     return records
 
-def extract_experience_records(text:str,title:str="")->list[dict]:
-    """把一张或多张海报中的多名分享者拆成独立就业记录。"""
-    if not is_experience_share(title):return []
-    normalized=re.sub(r"[ \t]+","",text)
-    lines=[line.strip() for line in normalized.splitlines() if line.strip()]
-    graduation_line_indexes=[i for i,line in enumerate(lines) if re.search(r"20\d{2}届",line)]
-    starts=list(re.finditer(r"20\d{2}届",normalized))
-    if not starts:return extract_without_graduation_year(text,title)
-    records=[]
-    for index,match in enumerate(starts):
-        end=starts[index+1].start() if index+1<len(starts) else min(len(normalized),match.start()+500)
-        block=normalized[match.start():end]
-        compact=re.sub(r"\s+","",block)
-        compact=compact.replace("硕土","硕士")
-        block_lines=[line for line in block.splitlines() if line]
-        graduation=match.group(0)
-        student_name=None
-        if index<len(graduation_line_indexes) and graduation_line_indexes[index]:
-            year_line=graduation_line_indexes[index]
-            # OCR偶尔会在人名和届别之间插入单个噪声字，向前检查最多4行。
-            for distance in range(1,min(5,year_line+1)):
-                candidate=lines[year_line-distance]
-                if re.fullmatch(r"[\u4e00-\u9fff·]{2,15}",candidate) and not any(word in candidate for word in ["分享","活动","选调","沙龙","就业","学院","公务员","助理","研究生","本科生"]):
-                    student_name=candidate;break
-        grade=first_pattern(compact,[r"20\d{2}级"])
-        degree=first_pattern(compact,[r"博士(?:研究生|毕业生)?",r"硕士(?:研究生|毕业生)?",r"本科(?:生|毕业生)?",r"研究生"])
-        major=None
-        if grade:
-            major_match=re.search(re.escape(grade)+r"(.{2,55}?)专业",compact)
-            if major_match:
-                major=major_match.group(1)
-                if "学院" in major:major=major.rsplit("学院",1)[-1]
-            else:
-                # 部分海报写“实验班本科生”而没有“专业”二字。
-                major_match=re.search(re.escape(grade)+r"(.{2,55}?)(?:本科生|硕士生|硕士研究生|研究生)",compact)
-                if major_match:
-                    major=major_match.group(1)
-                    if "学院" in major:major=major.rsplit("学院",1)[-1]
-        if not major:
-            major=next((item for item in words("majors.txt") if item in compact),None)
-        position_line=next((line for line in block_lines if any(k in line for k in ["书记助理","主任助理","岗位","职位","科员","干部","公务员"])),"")
-        organization_words=["局","委","办","部","厅","院","政府","街道","乡","镇","村","社区","公司","学校","医院","联社","档案馆","地区","州","盟","县"]
-        place_index=next((i for i,line in enumerate(block_lines) if line!=position_line and any(k in line for k in organization_words)
-                          and not any(k in line for k in ["学院","专业","研究生","本科生","选调生"])
-                          and not re.search(r"20\d{2}届",line)),None)
-        place_line=block_lines[place_index] if place_index is not None else ""
-        # 单位名称偶尔被OCR拆成两行，把紧邻且含行政区名称的上一行合并回来。
-        if (place_index and re.search(r"(?:省|自治区|市|地区|州|县)",block_lines[place_index-1])
-                and not re.search(r"20\d{2}届|选调生",block_lines[place_index-1])):
-            place_line=block_lines[place_index-1]+place_line
-        # “社会工 / 作部，现任职……”这类换行要接回单位，并取出真实岗位。
-        if place_index is not None and place_index+1<len(block_lines) and "现任职" in block_lines[place_index+1]:
-            place_line+=block_lines[place_index+1]
-        if "现任职" in place_line:
-            place_line,position_from_employer=place_line.split("现任职",1)
-            place_line=place_line.rstrip("，,；; ")
-            if position_from_employer:
-                if position_line and position_line not in position_from_employer:
-                    position_from_employer+=position_line
-                position_line=position_from_employer
-        place_line=re.sub(r"^(?:入职|就职于|任职于)","",place_line)
-        city=employment_region(place_line,title) if place_line else None
-        position=position_line or None
-        employer=place_line or ((city+"（具体单位未注明）") if city else None)
-        evidence="\n".join(block.splitlines()[:12])
-        values={"student_name":student_name,"graduation_year":graduation,"grade":grade,"degree":degree,"major":major,"city":city,"employer":employer,"position":position}
-        values={key:(value or "待人工核对") for key,value in values.items()}
-        values.update(evidence_text=evidence,needs_review=any(value=="待人工核对" for value in values.values()))
-        records.append(values)
-    return records
+
+def extract_without_graduation_year(text:str,title:str)->list[dict]:
+    return extract_experience_records(text,title)

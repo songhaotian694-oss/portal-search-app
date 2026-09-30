@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { motion } from 'framer-motion'
 import { ArrowDownWideNarrow } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { DetailDrawer } from '../components/DetailDrawer'
@@ -45,7 +44,7 @@ export function SearchPage({ onSearch }: { onSearch: (query: string, priority?: 
     <div className={`query-bar ${scrolled ? 'query-bar-small' : ''}`}><SmartSearch key={query + priorityKey} initialValue={query} initialPriority={priority} compact onSubmit={onSearch} /></div>
     <div className="results-toolbar"><div><strong>{loading ? '正在检索' : `${records.length} 条结果`}</strong></div><div className="toolbar-actions"><label><ArrowDownWideNarrow size={15} /><select aria-label="排序方式" value={sort} onChange={event => setSort(event.target.value as typeof sort)}><option value="relevance">相关度优先</option><option value="newest">最新收录</option></select></label></div></div>
     {error && <p className="workspace-message" role="alert">{error}</p>}
-    <div className="search-columns"><FilterPanel records={allRecords} filters={filters} onChange={setFilters} /><section className="result-column"><motion.div layout><ResultList records={sorted} loading={loading} onOpen={setSelected} /></motion.div></section></div>
+    <div className="search-columns"><FilterPanel records={allRecords} filters={filters} onChange={setFilters} /><section className="result-column"><ResultList records={sorted} loading={loading} onOpen={setSelected} /></section></div>
     <DetailDrawer record={selected} onClose={() => setSelected(null)} />
   </div>
 }

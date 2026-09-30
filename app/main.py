@@ -9,7 +9,11 @@ from .version import APP_VERSION
 from .api import auth,sync,process,search,articles,export,settings,records,analytics
 @asynccontextmanager
 async def lifespan(app:FastAPI):
-    ensure_directories();db.initialize();yield
+    ensure_directories();db.initialize()
+    try:
+        yield
+    finally:
+        await auth.browser_session.close()
 app=FastAPI(title="就业分享信息检索",lifespan=lifespan)
 for r in [auth.router,sync.router,process.router,search.router,articles.router,export.router,settings.router,records.router,analytics.router]:app.include_router(r)
 @app.get("/api/dashboard")

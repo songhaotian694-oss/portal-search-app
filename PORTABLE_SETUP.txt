@@ -1,0 +1,10 @@
+Windows 便携版使用方法
+
+1. 在 Windows 电脑上克隆本仓库，双击“启动软件.vbs”。也可以双击 run.bat 查看启动过程。
+2. 首次启动会显示下载进度窗口，从本仓库的 GitHub Releases 下载 Windows 便携包，校验 SHA-256，并解压到 dist\EmploymentPortalSearch。请保持网络连接并等待下载完成。
+3. 下载完成后软件自动打开，进入登录界面。学校账号、密码和验证码由你本人在软件中输入。
+4. 后续双击“启动软件.vbs”会直接打开软件，不再显示下载窗口，通常也不需要联网下载。请勿只移动 EXE；如需转移，请保留整个 dist\EmploymentPortalSearch 文件夹。
+
+使用便携包不需要自行安装 Python、Node.js、pnpm 或 OCR 库。Windows 仍需可用的 Microsoft Edge WebView2 Runtime；如果软件提示缺少它，请从微软官方渠道安装。当前便携包仅面向 Windows x64。
+
+登录状态和采集的数据只保存在当前电脑的 data 目录，不在 GitHub 仓库或便携包中。克隆到新电脑后需要重新完成学校认证。

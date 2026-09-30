@@ -15,7 +15,7 @@ def runtime_root() -> Path:
         return RESOURCE_ROOT
     exe_dir = Path(sys.executable).resolve().parent
     project_dir = exe_dir.parent.parent
-    if (project_dir / "launcher.py").is_file() and (project_dir / "data").is_dir():
+    if (project_dir / "launcher.py").is_file():
         return project_dir
     return exe_dir
 
@@ -54,13 +54,15 @@ def config_path() -> Path: return CONFIG_DIR / "portal.yaml"
 
 def load_config() -> dict[str, Any]:
     path = config_path()
+    profile=RESOURCE_ROOT/'config'/'portal.profile.yaml'
+    defaults={**DEFAULT_CONFIG,**(yaml.safe_load(profile.read_text(encoding='utf-8')) or {})} if profile.is_file() else DEFAULT_CONFIG.copy()
     if not path.exists():
-        return DEFAULT_CONFIG.copy()
+        return defaults
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        return {**DEFAULT_CONFIG, **data}
+        return {**defaults, **data}
     except yaml.YAMLError:
-        return DEFAULT_CONFIG.copy()
+        return defaults
 
 def save_config(data: dict[str, Any]) -> dict[str, Any]:
     CONFIG_DIR.mkdir(exist_ok=True)

@@ -19,5 +19,6 @@ def test_excel_export(tmp_path,monkeypatch):
     monkeypatch.setattr(export_api,"db",d); response=asyncio.run(export_api.export())
     from openpyxl import load_workbook
     wb=load_workbook(response.path)
-    assert "检索结果" in wb.sheetnames and "待人工核对记录" in wb.sheetnames
-    assert wb["待人工核对记录"]["B2"].value=="张同学"
+    assert "检索结果" in wb.sheetnames and "信息不完整记录" in wb.sheetnames
+    assert wb["信息不完整记录"]["B2"].value=="张同学"
+    assert wb['检索结果']['D2'].value is None

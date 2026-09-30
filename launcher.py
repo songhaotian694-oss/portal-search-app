@@ -37,7 +37,15 @@ def choose_port()->tuple[int,bool]:
         if port_is_free(port):return port,False
     raise RuntimeError("本机端口 8765—8774 均被占用，请关闭不需要的程序后重试。")
 
-def serve(port:int):uvicorn.run(app,host=HOST,port=port,log_level="info")
+def make_server(port:int):
+    return uvicorn.Server(uvicorn.Config(app,host=HOST,port=port,log_level="info"))
+
+def serve(port:int):make_server(port).run()
+
+def free_debug_port()->int:
+    with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as sock:
+        sock.bind((HOST,0))
+        return sock.getsockname()[1]
 
 def wait_until_ready(port:int,timeout:float=15.0)->bool:
     deadline=time.time()+timeout
@@ -48,23 +56,51 @@ def wait_until_ready(port:int,timeout:float=15.0)->bool:
 
 if __name__=="__main__":
     ensure_directories();port,reused=choose_port()
+    # Native login belongs to this process's desktop form. Reusing a backend
+    # from another form/process would attach authentication to that old window.
     if reused:
-        print(f"软件已在 http://{HOST}:{port} 运行，直接打开现有界面。")
-    else:
-        threading.Thread(target=serve,args=(port,),daemon=True).start()
+        free_ports=[candidate for candidate in range(8765,8775) if port_is_free(candidate)]
+        if not free_ports:raise RuntimeError("软件实例过多，请关闭旧窗口后重新启动。")
+        port=free_ports[0]
+    server=make_server(port)
+    server_thread=threading.Thread(target=server.run,daemon=True)
+    server_thread.start()
     if not wait_until_ready(port):
-        # 旧实例可能恰好在检测后退出，此时在同一端口补启动一次。
-        if reused and port_is_free(port):
-            reused=False
-            threading.Thread(target=serve,args=(port,),daemon=True).start()
-        if not wait_until_ready(port):
-            raise RuntimeError(f"本地服务启动失败，无法访问 http://{HOST}:{port}。请查看上方错误信息。")
+        raise RuntimeError(f"本地服务启动失败，无法访问 http://{HOST}:{port}。请查看上方错误信息。")
     local_url=f"http://{HOST}:{port}"
     try:
         import webview
-        webview.create_window("中央民族大学就业分享信息检索",local_url,width=1280,height=820,min_size=(1000,650))
-        webview.start()
+        from app.desktop_login import desktop_login
+        debug_port=free_debug_port()
+        webview.settings['REMOTE_DEBUGGING_PORT']=debug_port
+        window=webview.create_window("知序 · 选调生信息检索",local_url,width=1280,height=820,min_size=(1000,650))
+        desktop_login.attach(window,debug_port)
+        closing=threading.Event()
+
+        def close_desktop():
+            if closing.is_set():
+                return False
+            closing.set()
+
+            def shutdown():
+                # Keep the UI pump alive until the server has saved the latest
+                # tokens and disconnected Playwright from its native view.
+                server.should_exit=True
+                server_thread.join(timeout=10)
+                try:desktop_login.dispose()
+                except Exception:pass
+                window.destroy()
+
+            threading.Thread(target=shutdown,daemon=True).start()
+            return True
+
+        window.events.closing+=close_desktop
+        webview.start(gui="edgechromium",private_mode=True)
+        server.should_exit=True
+        server_thread.join(timeout=10)
     except Exception as exc:
+        from app.desktop_login import desktop_login
+        desktop_login.detach()
         print(f"PyWebView 无法启动（{exc}），已改用浏览器。")
         webbrowser.open(local_url)
         try:

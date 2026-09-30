@@ -12,7 +12,7 @@ const dimensions: { value: Dimension; label: string }[] = [
   { value: 'major', label: '专业' }, { value: 'city', label: '地区' }, { value: 'position', label: '岗位' }, { value: 'year', label: '届别' }, { value: 'dateYear', label: '收录年份' }, { value: 'degree', label: '学历' },
 ]
 const colors = ['#203f5d', '#2b7b96', '#787fa8']
-const read = (record: ExperienceRecord, key: Dimension) => key === 'year' ? (record.year ? `${record.year} 届` : '待核对') : key === 'dateYear' ? (record.date.slice(0, 4) || '待核对') : record[key]
+const read = (record: ExperienceRecord, key: Dimension) => key === 'year' ? (record.year ? `${record.year} 届` : '未提取') : key === 'dateYear' ? (record.date.slice(0, 4) || '未提取') : record[key]
 
 function relationOption(analytics: AnalyticsResponse, selected: string | null, dims: Dimension[]): EChartsOption {
   const prominent = new Set(dims.flatMap(dim => analytics.relations.nodes

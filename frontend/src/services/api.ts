@@ -3,13 +3,13 @@ import type { AnalyticsResponse, AnalyticsSummary, ExperienceRecord, Facet, Over
 
 type RawRecord = {
   id: number; article_id: number; record_no: number; student_name: string; graduation_year: string
-  degree: string; major: string; city: string; employer: string; position: string
+  grade: string; degree: string; major: string; city: string; employer: string; position: string
   evidence_text: string; needs_review: number; title: string; published_at: string
-  detail_url: string; collected_at: string
+  detail_url: string; collected_at: string; quality_json?: string
 }
 
 export type JobStatus = { status: string; current: number; total: number; success?: number; failed?: number; message: string }
-export type AuthStatus = { started?: boolean; logged_in: boolean; url: string; message?: string }
+export type AuthStatus = { started?: boolean; logged_in: boolean; url: string; remember_login: boolean; embedded: boolean; login_open: boolean; message?: string }
 export type PortalSettings = { portal_url: string; employment_entry: string; allowed_domains: string[]; data_source: string; api_keywords: string[] }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -28,16 +28,18 @@ function toRecord(raw: RawRecord): ExperienceRecord {
   const year = Number(normalize(raw.graduation_year).match(/20\d{2}/)?.[0] || 0)
   const date = raw.published_at || raw.collected_at || ''
   const evidence = raw.evidence_text || ''
+  const fields: Record<string, string> = { graduation_year: '届别', grade: '入学年级', degree: '学历', major: '专业', city: '地区', employer: '单位', position: '岗位' }
+  const missing = Object.entries(fields).filter(([key]) => !normalize(raw[key as keyof RawRecord] as string)).map(([, label]) => label)
   return {
     id: String(raw.id), person: normalize(raw.student_name) || `记录 ${raw.id}`, year,
-    major: normalize(raw.major) || '待核对', degree: normalize(raw.degree) || '待核对',
-    city: normalize(raw.city) || '待核对', province: normalize(raw.city) || '',
-    position: normalize(raw.position) || '待核对', organization: normalize(raw.employer) || '待核对',
+    major: normalize(raw.major) || '未提取', degree: normalize(raw.degree) || '未提取',
+    city: normalize(raw.city) || '未提取', province: normalize(raw.city) || '',
+    position: normalize(raw.position) || '未提取', organization: normalize(raw.employer) || '未提取',
     type: '选调经验', title: raw.title || '选调经验分享',
     excerpt: evidence.slice(0, 150) || '暂无证据文字，请查看来源文章并核对提取结果。',
     detail: evidence || '暂无 OCR 证据文字。', source: raw.title || '本地文章', date,
     keywords: [raw.graduation_year, raw.major, raw.city, raw.position].filter(Boolean),
-    sourceUrl: raw.detail_url, needsReview: Boolean(raw.needs_review),
+    sourceUrl: raw.detail_url, needsReview: Boolean(raw.needs_review), missingFields: missing,
   }
 }
 
@@ -78,10 +80,13 @@ export const api = {
   },
   getAnalytics: (dimensions: string[]) => request<AnalyticsResponse>(`/api/analytics?dimensions=${encodeURIComponent(dimensions.join(','))}`),
   authStatus: () => request<AuthStatus>('/api/auth/status'),
-  openLogin: () => request<AuthStatus>('/api/auth/start', { method: 'POST' }),
+  openLogin: (rememberLogin?: boolean) => request<AuthStatus>('/api/auth/start', json(rememberLogin === undefined ? {} : { remember_login: rememberLogin })),
   confirmLogin: () => request<AuthStatus>('/api/auth/confirm', { method: 'POST' }),
+  cancelLogin: () => request<AuthStatus>('/api/auth/cancel', { method: 'POST' }),
+  saveAuthPreferences: (rememberLogin: boolean) => request<{ remember_login: boolean }>('/api/auth/preferences', { method: 'PUT', body: JSON.stringify({ remember_login: rememberLogin }) }),
   syncStatus: () => request<JobStatus>('/api/sync/status'),
   startSync: (mode: 'test' | 'full') => request<JobStatus>('/api/sync/start', json({ mode, max_pages: mode === 'full' ? 1000 : 2 })),
+  ensureData: () => request<{ started: boolean; stage?: 'sync' | 'process' }>('/api/sync/ensure', { method: 'POST' }),
   retrySync: () => request<JobStatus>('/api/sync/retry', { method: 'POST' }),
   processStatus: () => request<JobStatus>('/api/process/status'),
   startProcess: (allLocal: boolean) => request<JobStatus>('/api/process/start', json({ all_local: allLocal, build_index: false })),

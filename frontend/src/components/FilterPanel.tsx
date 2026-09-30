@@ -21,7 +21,7 @@ export function FilterPanel({ records, filters, onChange }: { records: Experienc
     {sections.map(section => {
       if (!more && !filters[section.key] && (section.key === 'degree' || section.key === 'dateYear')) return null
       const counts = new Map<string, number>()
-      records.forEach(record => { const value = section.pick(record); if (value && value !== '0' && value !== '待核对') counts.set(value, (counts.get(value) || 0) + 1) })
+      records.forEach(record => { const value = section.pick(record); if (value && value !== '0' && value !== '未提取') counts.set(value, (counts.get(value) || 0) + 1) })
       const options = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'zh-CN'))
       const visible = expanded[section.key] ? options : options.slice(0, section.key === 'major' ? 4 : 5)
       return <section className="filter-section" key={section.key}><div className="filter-section-title"><h3>{section.label}</h3></div><div className="filter-options">

@@ -25,6 +25,7 @@ export interface ExperienceRecord {
   keywords: string[]
   sourceUrl?: string
   needsReview?: boolean
+  missingFields?: string[]
 }
 
 export interface SearchFilters {

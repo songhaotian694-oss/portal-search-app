@@ -1,0 +1,88 @@
+name: Windows portable release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-portable-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pnpm
+        shell: pwsh
+        run: npm install --global pnpm@10
+      - name: Build interface
+        shell: pwsh
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+      - name: Install Python dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Verify Python code
+        shell: pwsh
+        run: python -m pytest -q
+      - name: Package desktop app
+        shell: pwsh
+        run: |
+          $options = @(
+            '--noconfirm', '--clean', '--windowed',
+            '--name', 'EmploymentPortalSearch',
+            '--icon', 'assets/app-icon.ico',
+            '--add-data', 'frontend/dist;frontend/dist',
+            '--add-data', 'config/cities.txt;config',
+            '--add-data', 'config/majors.txt;config',
+            '--add-data', 'config/portal.example.yaml;config',
+            '--add-data', 'config/portal.profile.yaml;config',
+            '--add-data', 'config/portal.profile.yaml;config',
+            '--add-data', 'tests/fixtures;tests/fixtures',
+            '--collect-all', 'playwright',
+            '--collect-all', 'rapidocr_onnxruntime',
+            '--collect-all', 'onnxruntime',
+            '--collect-all', 'cv2',
+            'launcher.py'
+          )
+          python -m PyInstaller @options
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path 'dist/EmploymentPortalSearch/EmploymentPortalSearch.exe')) {
+            throw 'Desktop executable was not produced.'
+          }
+      - name: Create portable archive and checksum
+        shell: pwsh
+        run: |
+          $archive = 'EmploymentPortalSearch-windows-x64.zip'
+          Compress-Archive -Path 'dist/EmploymentPortalSearch' -DestinationPath $archive -CompressionLevel Optimal
+          (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant() |
+            Set-Content -LiteralPath "$archive.sha256" -Encoding ascii -NoNewline
+      - name: Publish portable release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "portable-$env:GITHUB_RUN_NUMBER-$env:GITHUB_RUN_ATTEMPT"
+          gh release create $tag `
+            'EmploymentPortalSearch-windows-x64.zip' `
+            'EmploymentPortalSearch-windows-x64.zip.sha256' `
+            --target $env:GITHUB_SHA `
+            --title "Windows portable build $tag" `
+            --notes 'Clone this repository and double-click run.bat. The first launch downloads this package.' `
+            --latest

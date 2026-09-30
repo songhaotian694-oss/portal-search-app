@@ -10,18 +10,18 @@ DIMENSIONS = {"major", "city", "position", "year", "dateYear", "degree"}
 
 
 def valid(value: object) -> bool:
-    return bool(value) and value not in {"待人工核对", "待核对", "0"}
+    return bool(value) and value not in {"待人工核对", "待核对", "未提取", "0"}
 
 
 def value_for(row: dict, dimension: str) -> str:
     if dimension == "year":
         year = str(row.get("graduation_year") or "")[:4]
-        return f"{year} 届" if year.isdigit() else "待核对"
+        return f"{year} 届" if year.isdigit() else "未提取"
     if dimension == "dateYear":
         year = str(row.get("published_at") or row.get("collected_at") or "")[:4]
-        return year if year.isdigit() else "待核对"
-    value = str(row.get(dimension) or "待核对")
-    return "待核对" if value == "待人工核对" else value
+        return year if year.isdigit() else "未提取"
+    value = str(row.get(dimension) or "未提取")
+    return "未提取" if value == "待人工核对" else value
 
 
 def summarize(rows: list[dict]) -> dict:

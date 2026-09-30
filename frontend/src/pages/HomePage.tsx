@@ -72,7 +72,7 @@ export function HomePage({ onSearch }: { onSearch: (query: string, priority?: Fa
           <div className="home-knowledge-head"><span>快捷检索</span><span>点击线索查看结果</span></div>
           <div className="home-knowledge-network">
             <svg viewBox="0 0 440 116" preserveAspectRatio="none" aria-hidden="true"><path d="M70 58 C145 58 158 27 220 58 S312 58 370 27" /><path d="M70 58 C145 58 160 89 220 58 S315 58 370 89" /><circle cx="220" cy="58" r="5" /></svg>
-            {quickQueries.map(item => <motion.button key={item.query} type="button" data-liquid className={`home-knowledge-node home-node-${item.position}`} onClick={() => submitSearch(item.query)} whileHover={reduced ? undefined : { y: -4, scale: 1.04 }} whileTap={reduced ? undefined : { scale: 0.97 }} aria-label={`检索${item.label}`}>{item.label}<ArrowUpRight size={13} /></motion.button>)}
+            {quickQueries.map(item => <motion.button key={item.query} type="button" data-liquid className={`home-knowledge-node home-node-${item.position}`} onClick={() => submitSearch(item.query)} whileHover={reduced ? undefined : { y: -4, scale: 1.04 }} whileTap={reduced ? undefined : { scale: 0.97 }} aria-label={`检索${item.label}`}><span className="home-knowledge-node-content">{item.label}<ArrowUpRight size={13} /></span></motion.button>)}
           </div>
         </motion.div>
       </div>

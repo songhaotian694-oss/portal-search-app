@@ -183,7 +183,8 @@ async def run(req:SyncRequest):
         if req.mode=="full":
             from .process import start as start_processing
             from ..models import ProcessRequest
-            await start_processing(ProcessRequest(all_local=False,build_index=False))
+            from ..processing.field_extractor import PIPELINE_VERSION
+            await start_processing(ProcessRequest(all_local=db.metadata('pipeline_version')!=PIPELINE_VERSION,build_index=False))
             STATE["message"] += "；附件与记录识别已在后台启动"
     except Exception as e:
         STATE.update(status="failed",message=f"同步暂停：{type(e).__name__}: {e}");db.finish_job(job,"failed",STATE["current"],STATE["success"],STATE["failed"],STATE["message"])
@@ -191,7 +192,32 @@ async def run(req:SyncRequest):
 async def start(req:SyncRequest):
     global task
     if task and not task.done():return STATE
+    from . import process
+    if process.task and not process.task.done():raise HTTPException(409,'自动识别正在运行，请完成后更新数据')
+    STATE.update(status='running',current=0,total=0,message='正在准备拉取数据')
     task=asyncio.create_task(run(req));return STATE
+
+_ensured=False
+@router.post('/ensure')
+async def ensure():
+    """Run once after authentication; fresh installations fetch, upgrades reprocess."""
+    global _ensured
+    if _ensured:return {'started':False}
+    ok,_=await browser_session.is_logged_in()
+    if not ok:raise HTTPException(401,'需要先完成学校认证')
+    from . import process
+    from ..processing.field_extractor import PIPELINE_VERSION
+    if (task and not task.done()) or (process.task and not process.task.done()):return {'started':False}
+    _ensured=True
+    stats=db.stats()
+    if stats['articles']==0:
+        await start(SyncRequest(mode='full',max_pages=1000))
+        return {'started':True,'stage':'sync'}
+    if db.metadata('pipeline_version')!=PIPELINE_VERSION:
+        from ..models import ProcessRequest
+        await process.start(ProcessRequest(all_local=True,build_index=False))
+        return {'started':True,'stage':'process'}
+    return {'started':False}
 @router.get("/status")
 async def status():return STATE
 @router.post("/retry")
