@@ -16,20 +16,17 @@ Write-Host 'The archive is large. Keep this window open until the download and e
 $repository = 'songhaotian694-oss/portal-search-app'
 $archiveName = 'EmploymentPortalSearch-windows-x64.zip'
 $checksumName = "$archiveName.sha256"
-$headers = @{ 'User-Agent' = 'EmploymentPortalSearch-Portable-Launcher'; 'Accept' = 'application/vnd.github+json' }
-$release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repository/releases/latest" -Headers $headers
-$archiveAsset = $release.assets | Where-Object { $_.name -eq $archiveName } | Select-Object -First 1
-$checksumAsset = $release.assets | Where-Object { $_.name -eq $checksumName } | Select-Object -First 1
-if (-not $archiveAsset -or -not $checksumAsset) {
-    throw 'The latest GitHub release does not contain a complete Windows portable package.'
-}
+$downloadBase = "https://github.com/$repository/releases/latest/download"
+$headers = @{ 'User-Agent' = 'EmploymentPortalSearch-Portable-Launcher' }
 
 New-Item -ItemType Directory -Path $distRoot -Force | Out-Null
 $archive = Join-Path $distRoot $archiveName
 $partial = "$archive.partial"
+$checksumFile = Join-Path $distRoot $checksumName
 try {
-    Invoke-WebRequest -Uri $archiveAsset.browser_download_url -Headers $headers -OutFile $partial -UseBasicParsing
-    $expected = ([string](Invoke-WebRequest -Uri $checksumAsset.browser_download_url -Headers $headers -UseBasicParsing).Content).Trim()
+    Invoke-WebRequest -Uri "$downloadBase/$archiveName" -Headers $headers -OutFile $partial -UseBasicParsing
+    Invoke-WebRequest -Uri "$downloadBase/$checksumName" -Headers $headers -OutFile $checksumFile -UseBasicParsing
+    $expected = (Get-Content -LiteralPath $checksumFile -Raw -Encoding ASCII).Trim()
     if ($expected -notmatch '^[0-9a-fA-F]{64}$') {
         throw 'The release checksum is invalid.'
     }
@@ -46,7 +43,7 @@ try {
     Remove-Item -LiteralPath $installing -Force
     Write-Host 'The app is ready. Starting the login screen...'
 } finally {
-    Remove-Item -LiteralPath $partial, $archive -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $partial, $archive, $checksumFile -Force -ErrorAction SilentlyContinue
 }
 
 Start-Process -FilePath $executable -WorkingDirectory $appRoot
