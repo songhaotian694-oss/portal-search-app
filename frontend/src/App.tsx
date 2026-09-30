@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { LoginGate } from './components/LoginGate'
+import { useLiquidFeedback } from './hooks/useLiquidFeedback'
 import { api, type AuthStatus } from './services/api'
 import type { Facet } from './types'
 
@@ -11,6 +12,7 @@ const ExplorePage = lazy(() => import('./pages/ExplorePage').then(module => ({ d
 const WorkspacePage = lazy(() => import('./pages/WorkspacePage').then(module => ({ default: module.WorkspacePage })))
 
 export default function App() {
+  useLiquidFeedback()
   const navigate = useNavigate()
   const location = useLocation()
   const [auth, setAuth] = useState<AuthStatus | null>(null)

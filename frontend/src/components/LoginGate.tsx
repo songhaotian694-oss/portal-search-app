@@ -64,8 +64,8 @@ export function LoginGate({ started, checkError, onAuthenticated, onRefresh }: {
       <h1>请先登录</h1>
       <p>登录学校门户后，即可使用信息检索和数据整理功能。</p>
       <div className="login-actions">
-        <button className="login-primary" onClick={() => void openLogin()} disabled={busy || !settings || portalUrl.startsWith('https://TODO')}>打开登录窗口 <ArrowRight size={17} /></button>
-        <button className="login-secondary" onClick={() => void confirm()} disabled={busy || !started}><RefreshCw size={15} /> 检查登录状态</button>
+        <button className="login-primary" data-liquid onClick={() => void openLogin()} disabled={busy || !settings || portalUrl.startsWith('https://TODO')}>打开登录窗口 <ArrowRight size={17} /></button>
+        <button className="login-secondary" data-liquid onClick={() => void confirm()} disabled={busy || !started}><RefreshCw size={15} /> 检查登录状态</button>
       </div>
       {(error || checkError) && <p className="login-error" role="alert">{error || checkError}</p>}
       {message && <p className="login-message" role="status">{message}</p>}

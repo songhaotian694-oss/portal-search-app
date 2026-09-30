@@ -40,7 +40,7 @@ export function SmartSearch({ initialValue = '', initialPriority = [], compact =
           </motion.span>)}
         </AnimatePresence>
       </div>}
-      <div className="smart-bottom"><button className="primary-action" type="submit" disabled={!value.trim()}>搜索 <ArrowRight size={17} /></button></div>
+      <div className="smart-bottom"><button className="primary-action" data-liquid type="submit" disabled={!value.trim()}>搜索 <ArrowRight size={17} /></button></div>
     </form>
   )
 }
