@@ -305,3 +305,6 @@ body{background:#f7f8f7}
 }
 
 .auto-data-status{max-width:1480px;margin:18px auto 0;padding:12px 4.2vw;display:flex;align-items:center;justify-content:space-between;gap:18px;color:#456d80;font-size:12px}.auto-data-status a{flex:none;color:#1d617d;font-weight:600}.drawer-missing{font-size:12px;color:#687b89;line-height:1.8;margin:0 0 18px}
+
+.search-export{display:inline-flex;align-items:center;gap:6px;color:#466779;font-size:11px;text-decoration:none;padding:6px 9px;border:1px solid #d8e1e4;border-radius:5px}.search-export:hover{background:#eaf1f2}.search-export[aria-disabled="true"]{opacity:.45;pointer-events:none}.toolbar-actions{flex-wrap:wrap}
+@media(max-width:700px){.filter-panel{top:auto;max-height:none;padding-right:0}}

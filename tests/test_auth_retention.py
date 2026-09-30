@@ -311,7 +311,7 @@ def test_saved_state_restores_only_once_and_then_reports_authenticated(config, m
     assert "__zhixu_restored__" in page.add_init_script.call_args.args[0]
 
 
-def test_expired_saved_state_is_cleared_and_manual_login_remains_available(config, monkeypatch):
+def test_unverified_saved_state_is_kept_and_manual_login_remains_available(config, monkeypatch):
     store = FakeStore(state=SAVED_STATE)
     session = BrowserSession(store=store, desktop=FakeDesktop())
     page = FakePage(LOGIN_URL, password_count=1)
@@ -332,12 +332,13 @@ def test_expired_saved_state_is_cleared_and_manual_login_remains_available(confi
         second = await session.get_status()
         assert not first["logged_in"] and not first["started"]
         assert not second["logged_in"]
-        assert "已过期" in first["message"]
+        assert "未能通过验证" in first["message"]
         assert "重新登录" in first["message"]
 
     asyncio.run(check())
 
-    assert store.loads == 1 and store.clears == 1
+    assert store.loads == 1 and store.clears == 0
+    assert store.state == SAVED_STATE
     assert session.desktop.disposals == 1
     create_session.assert_awaited_once()
     playwright.stop.assert_awaited_once()
@@ -355,6 +356,119 @@ def test_restore_connection_failure_keeps_saved_state_for_a_later_start(config, 
     assert "暂时无法恢复" in status["message"]
     assert store.clears == 0
     assert store.state == SAVED_STATE
+
+
+@pytest.mark.parametrize("embedded", [True, False])
+def test_restore_uses_portal_session_even_when_school_sso_has_expired(config, monkeypatch, embedded):
+    entry = "https://portal.example.test/notices"
+    config["employment_entry"] = entry
+    store = FakeStore(state=SAVED_STATE)
+    session = BrowserSession(store=store, desktop=FakeDesktop())
+    session.desktop.available = embedded
+    page = FakePage(LOGIN_URL)
+    context = FakeContext([page])
+
+    async def navigate(url, **kwargs):
+        page.url = url
+        page.password_count = int(url == LOGIN_URL)
+
+    page.goto.side_effect = navigate
+
+    async def create(visible):
+        session.page, session.context = page, context
+
+    monkeypatch.setattr(session, "_create_session", AsyncMock(side_effect=create))
+    status = asyncio.run(session.get_status())
+
+    assert status["logged_in"] is True
+    assert "恢复" in status["message"]
+    page.goto.assert_awaited_once_with(entry, wait_until="domcontentloaded", timeout=15000)
+    assert store.clears == 0
+    assert store.saved == [SAVED_STATE]
+
+
+def test_restore_waits_for_school_redirect_after_domcontentloaded(config, monkeypatch):
+    store = FakeStore(state=SAVED_STATE)
+    session = BrowserSession(store=store, desktop=FakeDesktop())
+    page = FakePage(LOGIN_URL, password_count=1)
+    page.navigation_result = LOGIN_URL
+    context = FakeContext([page])
+
+    async def create(visible):
+        session.page, session.context = page, context
+
+    async def check():
+        async def finish_sso():
+            await asyncio.sleep(.1)
+            page.url = PORTAL_URL
+            page.password_count = 0
+        redirect = asyncio.create_task(finish_sso())
+        status = await session.get_status()
+        await redirect
+        return status
+
+    monkeypatch.setattr(session, "_create_session", AsyncMock(side_effect=create))
+    status = asyncio.run(check())
+    assert status["logged_in"] is True
+    assert store.clears == 0
+
+
+def test_restore_does_not_accept_portal_that_redirects_back_to_login(config):
+    session = connected_session()
+
+    async def check():
+        async def redirect_to_login():
+            await asyncio.sleep(.1)
+            session.page.url = LOGIN_URL
+            session.page.password_count = 1
+        redirect = asyncio.create_task(redirect_to_login())
+        restored = await session._wait_for_restored_login(timeout=.4)
+        await redirect
+        return restored
+
+    assert asyncio.run(check()) is False
+
+
+def test_restore_can_retry_after_transient_native_startup_failure(config, monkeypatch):
+    store = FakeStore(state=SAVED_STATE)
+    session = BrowserSession(store=store, desktop=FakeDesktop())
+    page = FakePage()
+    context = FakeContext([page])
+    attempts = 0
+
+    async def create(visible):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("native view not ready")
+        session.page, session.context = page, context
+
+    monkeypatch.setattr(session, "_create_session", AsyncMock(side_effect=create))
+
+    async def check():
+        first = await session.get_status()
+        assert not first["logged_in"]
+        assert not (await session.get_status())["logged_in"]
+        assert attempts == 1  # Back off rather than recreating on every poll.
+        session._restore_retry_at = 0
+        assert (await session.get_status())["logged_in"]
+
+    asyncio.run(check())
+    assert attempts == 2 and store.clears == 0
+
+
+def test_restore_ignores_entry_outside_the_school_target_host(config, monkeypatch):
+    config["employment_entry"] = "https://unrelated.example.test/"
+    session = BrowserSession(store=FakeStore(state=SAVED_STATE), desktop=FakeDesktop())
+    page = FakePage()
+    context = FakeContext([page])
+
+    async def create(visible):
+        session.page, session.context = page, context
+
+    monkeypatch.setattr(session, "_create_session", AsyncMock(side_effect=create))
+    assert asyncio.run(session.get_status())["logged_in"]
+    page.goto.assert_awaited_once_with(LOGIN_URL, wait_until="domcontentloaded", timeout=15000)
 
 
 def test_cdp_detection_ignores_local_main_page_and_other_context_pages(config):

@@ -1,42 +1,52 @@
-import type { Facet, QueryToken, SearchFilters } from '../types'
+import rules from '../../../config/search_rules.json'
+import type { Facet, QueryToken } from '../types'
 
 export const facetNames: Record<Facet, string> = {
-  year: '届别', dateYear: '年份', major: '专业', city: '地区', type: '类型', degree: '学历', position: '岗位',
+  year: '届别', dateYear: '发布年份', major: '专业', city: '地区', type: '类型', degree: '学历', position: '岗位',
 }
 
-const majors = ['计算机科学与技术', '计算机', '软件工程', '电子信息', '公共管理', '新闻传播', '汉语言文学', '统计学', '社会学', '经济学', '法学']
-const cities = ['北京', '上海', '广州', '深圳', '杭州', '成都', '南京', '武汉', '重庆', '苏州', '西安']
-const positions = ['数字治理', '数据分析', '信息技术', '基层治理', '政策研究', '组织人事', '宣传策划', '文字综合', '法制审核', '经济发展', '社会工作', '综合管理']
+const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const negativePattern = /排除|不要|不含|不包括|不看|不是|不在|除了|非/
+const candidates = new Map<string, { facet: Facet; value: string }>()
+for (const facet of ['city', 'major', 'degree', 'position'] as const) {
+  for (const [value, aliases] of Object.entries(rules[facet])) {
+    for (const alias of aliases) candidates.set(alias.toLocaleLowerCase(), { facet, value })
+  }
+}
+const aliases = [...candidates.keys()].sort((a, b) => b.length - a.length)
+const entity = aliases.map(alias => /^[a-z]+$/i.test(alias) ? `(?<![a-z])${escape(alias)}(?![a-z])` : escape(alias)).join('|')
+const pattern = new RegExp(`20\\d{2}\\s*(?:届)?\\s*(?:至|到|[-~—–])\\s*20\\d{2}\\s*届|20\\d{2}\\s*(?:届|级|年(?:毕业|毕业生|发布|收录)?)|${entity}`, 'gi')
 
 export function parseQuery(query: string): QueryToken[] {
+  const text = query.normalize('NFKC')
   const tokens: QueryToken[] = []
-  const add = (facet: Facet, value: string) => {
-    if (!tokens.some(token => token.facet === facet)) tokens.push({ facet, label: facetNames[facet], value })
+  let previousEnd = 0
+  let previousFacet = ''
+  let negative = false
+  // Preview chips are descriptive; the backend receives the complete query.
+  // Quoted phrases and labeled fields are not inferred again here.
+  const masked = text.replace(/(?:排除|不要|不含)?["“][^"”]+["”]|(?:姓名|单位|岗位|专业|地区|学历)\s*[:：]\s*[^\s，,；;。]+/g, match => ' '.repeat(match.length))
+  for (const match of masked.matchAll(pattern)) {
+    const raw = match[0]
+    const gap = masked.slice(previousEnd, match.index)
+    let facet: Facet
+    let value: string
+    if (/^20\d{2}/.test(raw)) {
+      if (raw.includes('级')) { previousEnd = match.index + raw.length; previousFacet = ''; continue }
+      facet = raw.includes('年') && !raw.includes('毕业') ? 'dateYear' : 'year'
+      const years = raw.match(/20\d{2}/g)!
+      value = years.length === 2 ? years.join('–') : years[0]
+    } else ({ facet, value } = candidates.get(raw.toLocaleLowerCase())!)
+    if (negativePattern.test(gap)) negative = true
+    else if (facet !== previousFacet || /[,，;；。]|但是|而是|只要/.test(gap)) negative = false
+    const shown = negative ? `排除${value}` : value
+    const token = tokens.find(item => item.facet === facet)
+    if (token) {
+      if (!token.value.split(' / ').includes(shown)) token.value += ` / ${shown}`
+      token.sources!.push(raw)
+    } else tokens.push({ facet, label: facetNames[facet], value: shown, sources: [raw] })
+    previousEnd = match.index + raw.length
+    previousFacet = facet
   }
-  const year = query.match(/20\d{2}\s*届/)
-  if (year) add('year', year[0].match(/20\d{2}/)![0])
-  const dateYear = query.match(/20\d{2}\s*年/)
-  if (dateYear) add('dateYear', dateYear[0].match(/20\d{2}/)![0])
-  const major = majors.find(item => query.includes(item))
-  if (major) add('major', major)
-  const city = cities.find(item => query.includes(item))
-  if (city) add('city', city)
-  if (/选调|公务员/.test(query)) add('type', '选调经验')
-  if (/博士|硕士|本科/.test(query)) add('degree', query.match(/博士|硕士|本科/)![0])
-  const position = positions.find(item => query.includes(item))
-  if (position) add('position', position)
   return tokens
-}
-
-export function tokensToFilters(tokens: QueryToken[]): SearchFilters {
-  return Object.fromEntries(tokens.map(token => [token.facet, token.value])) as SearchFilters
-}
-
-export function freeText(query: string, tokens: QueryToken[]): string {
-  let text = query
-  for (const token of tokens) {
-    if (token.facet === 'city') text = text.replaceAll(`${token.value}市`, '')
-    text = text.replaceAll(token.value, '')
-  }
-  return text.replace(/查找|搜索|检索|寻找|关于|相关|收录|的|在|和|与|专业|地区|城市|岗位|经验|信息|届|年|选调|公务员|[\s，,。]+/g, '').trim()
 }

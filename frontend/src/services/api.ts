@@ -1,4 +1,3 @@
-import { freeText, parseQuery, tokensToFilters } from '../lib/query'
 import type { AnalyticsResponse, AnalyticsSummary, ExperienceRecord, Facet, Overview, SearchFilters, SearchResponse } from '../types'
 
 type RawRecord = {
@@ -8,7 +7,7 @@ type RawRecord = {
   detail_url: string; collected_at: string; quality_json?: string
 }
 
-export type JobStatus = { status: string; current: number; total: number; success?: number; failed?: number; message: string }
+export type JobStatus = { status: string; current: number; total: number; success?: number; failed?: number; message: string; resume_available?: boolean }
 export type AuthStatus = { started?: boolean; logged_in: boolean; url: string; remember_login: boolean; embedded: boolean; login_open: boolean; message?: string }
 export type PortalSettings = { portal_url: string; employment_entry: string; allowed_domains: string[]; data_source: string; api_keywords: string[] }
 
@@ -45,6 +44,16 @@ function toRecord(raw: RawRecord): ExperienceRecord {
 
 const json = (data: unknown): RequestInit => ({ method: 'POST', body: JSON.stringify(data) })
 
+function searchParameters(query: string, filters?: SearchFilters): URLSearchParams {
+  const merged = filters ?? {}
+  const params = new URLSearchParams()
+  if (query.trim()) params.set('q', query.trim())
+  if (merged.year) params.set('graduation_year', merged.year)
+  for (const key of ['degree', 'major', 'city', 'position'] as const) if (merged[key]) params.set(key, merged[key]!)
+  if (merged.dateYear) { params.set('date_from', `${merged.dateYear}-01-01`); params.set('date_to', `${merged.dateYear}-12-31`) }
+  return params
+}
+
 export const api = {
   async getOverview(): Promise<Overview> {
     const data = await request<{ valid_records: number; cities: number; majors: number; latest_year: number; articles: number; needs_review: number; last_sync: string | null }>('/api/dashboard')
@@ -56,17 +65,9 @@ export const api = {
   },
   async searchRecords(query: string, filters?: SearchFilters, priority: Facet[] = []): Promise<SearchResponse> {
     const started = performance.now()
-    const parsed = parseQuery(query)
-    const merged = filters ?? tokensToFilters(parsed)
-    const params = new URLSearchParams({ limit: '10000' })
-    const remaining = freeText(query, parsed)
-    if (remaining) params.set('q', remaining)
-    if (merged.year) params.set('graduation_year', merged.year)
-    if (merged.degree) params.set('degree', merged.degree)
-    if (merged.major) params.set('major', merged.major)
-    if (merged.city) params.set('city', merged.city)
-    if (merged.position) params.set('position', merged.position)
-    if (merged.dateYear) { params.set('date_from', `${merged.dateYear}-01-01`); params.set('date_to', `${merged.dateYear}-12-31`) }
+    const merged = filters ?? {}
+    const params = searchParameters(query, filters)
+    params.set('limit', '10000')
     const data = await request<{ results: RawRecord[]; summary: AnalyticsSummary }>(`/api/search?${params}`)
     const records = data.results.map(toRecord)
     if (priority.length) records.sort((a, b) => {
@@ -88,6 +89,8 @@ export const api = {
   startSync: (mode: 'test' | 'full') => request<JobStatus>('/api/sync/start', json({ mode, max_pages: mode === 'full' ? 1000 : 2 })),
   ensureData: () => request<{ started: boolean; stage?: 'sync' | 'process' }>('/api/sync/ensure', { method: 'POST' }),
   retrySync: () => request<JobStatus>('/api/sync/retry', { method: 'POST' }),
+  resumeSync: () => request<JobStatus>('/api/sync/start', json({ mode: 'resume', max_pages: 1000 })),
+  exportUrl: (query: string, filters: SearchFilters) => `/api/export?${searchParameters(query, filters)}`,
   processStatus: () => request<JobStatus>('/api/process/status'),
   startProcess: (allLocal: boolean) => request<JobStatus>('/api/process/start', json({ all_local: allLocal, build_index: false })),
   getSettings: () => request<PortalSettings>('/api/settings'),

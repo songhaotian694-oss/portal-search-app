@@ -6,6 +6,7 @@ __pycache__/
 build/
 dist/
 *.spec
+!EmploymentPortalSearch.spec
 
 # Local portal data, login state, OCR results, and exports
 data/

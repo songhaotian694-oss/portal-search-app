@@ -1,12 +1,15 @@
 from __future__ import annotations
 import asyncio
 import json
+import logging
 import os
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 from ..settings import DATA_DIR, load_config
 from ..desktop_login import desktop_login
 from .auth_store import AuthStore
+
+logger = logging.getLogger(__name__)
 
 
 def _browser_windows() -> dict[int, str]:
@@ -112,6 +115,7 @@ class BrowserSession:
         self._lock = asyncio.Lock()
         self._monitor = None
         self._restore_attempted = False
+        self._restore_retry_at = 0.0
         self._authenticated = False
         self._owns_browser = False
         self._headless = False
@@ -265,8 +269,26 @@ class BrowserSession:
         origin = f"{parsed.scheme}://{parsed.netloc}"
         return {"storage": storage, "session": {origin: session}}
 
+    async def _wait_for_restored_login(self, timeout: float = 6.0) -> bool:
+        """SSO and portal JavaScript may redirect after DOMContentLoaded."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        stable_url = ""
+        stable_since = loop.time()
+        while True:
+            ok, url = await self._detect_logged_in()
+            now = loop.time()
+            if not ok or url != stable_url:
+                stable_url = url if ok else ""
+                stable_since = now
+            elif now - stable_since >= 1.0:
+                return True
+            if now >= deadline:
+                return False
+            await asyncio.sleep(min(.25, deadline - now))
+
     async def _restore_once(self) -> None:
-        if self._restore_attempted:
+        if self._restore_attempted or asyncio.get_running_loop().time() < self._restore_retry_at:
             return
         self._restore_attempted = True
         state = self.store.load()
@@ -275,18 +297,35 @@ class BrowserSession:
         try:
             await self._create_session(visible=False)
             await self._apply_saved_state(state)
-            await self.page.goto(load_config()["portal_url"], wait_until="domcontentloaded", timeout=15000)
-            ok, _ = await self._detect_logged_in()
-            if ok:
-                await self._complete_login()
-                self.message = "已恢复本机登录状态。"
-                return
-            self.store.clear()
-            self.message = "保留的登录状态已过期，请重新登录。"
-        except Exception:
+            config = load_config()
+            login_url = config["portal_url"]
+            login_host, target_host = _login_and_target_hosts(login_url)
+            entry = config.get("employment_entry", "")
+            urls = []
+            # The portal session can outlive the school's SSO session. Going
+            # straight to CAS would require a new login despite valid portal
+            # cookies/storage, so try its configured entry before SSO.
+            if (urlparse(entry).scheme in {"http", "https"} and _host(entry) == target_host
+                    and target_host != login_host):
+                urls.append(entry)
+            if login_url not in urls:
+                urls.append(login_url)
+            for url in urls:
+                await self.page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                if await self._wait_for_restored_login():
+                    await self._complete_login()
+                    self.message = "已恢复本机登录状态。"
+                    return
+            # A redirect/loading page is not proof of expiry. Keep the file
+            # until a successful login replaces it or retention is disabled.
+            self.message = "保留的登录状态未能通过验证，请重新登录。"
+        except Exception as exc:
             # Network/WebView startup failure must leave normal manual login
             # available, and must not discard a potentially valid saved session.
             self.message = "暂时无法恢复登录状态，请在软件内重新登录。" if self.desktop.available else "暂时无法恢复登录状态，请重新登录。"
+            self._restore_attempted = False
+            self._restore_retry_at = asyncio.get_running_loop().time() + 10
+            logger.warning("Retained authentication restore failed (%s).", type(exc).__name__)
         if self.desktop.available:
             await asyncio.to_thread(self.desktop.dispose)
         await self._disconnect()
@@ -368,8 +407,9 @@ class BrowserSession:
                 try:
                     self.store.save(await self._snapshot())
                     self.message = "登录成功，已保留本机登录状态。"
-                except Exception:
+                except Exception as exc:
                     self.message = "登录成功，但未能保存登录状态，下次启动需要重新登录。"
+                    logger.warning("Retained authentication save failed (%s).", type(exc).__name__)
             else:
                 self.message = "登录成功，本次会话关闭后不保留登录状态。"
         if self._login_open or (self.desktop.available and self.desktop.visible):
@@ -447,8 +487,8 @@ class BrowserSession:
             if self._authenticated and self.context and self.store.remembers():
                 try:
                     self.store.save(await self._snapshot())
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.warning("Retained authentication final save failed (%s).", type(exc).__name__)
             await self._disconnect()
             self.login_hwnd = 0
 

@@ -2,6 +2,9 @@
 from __future__ import annotations
 import json,socket,sys,threading,time,webbrowser
 from urllib.request import urlopen
+if '--self-check' in sys.argv:
+    from app.package_check import main as package_check
+    raise SystemExit(package_check())
 import uvicorn
 from app.settings import DIRS,ensure_directories
 

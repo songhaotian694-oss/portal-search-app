@@ -21,13 +21,27 @@ if exist ".venv\Scripts\python.exe" (
 ) else (
   set "PYTHON=python"
 )
-"%PYTHON%" -m PyInstaller --noconfirm --clean --windowed --name EmploymentPortalSearch --icon "assets\app-icon.ico" ^
-  --add-data "frontend\dist;frontend\dist" ^
-  --add-data "config\cities.txt;config" --add-data "config\majors.txt;config" ^
-  --add-data "config\portal.example.yaml;config" --add-data "config\portal.profile.yaml;config" --add-data "tests\fixtures;tests\fixtures" ^
-  --collect-all playwright --collect-all rapidocr_onnxruntime --collect-all onnxruntime --collect-all cv2 launcher.py
+rem Use the reviewed spec; do not overwrite it with generated default settings.
+rem A short staging path also avoids damaging an existing running package.
+set "STAGING=%TEMP%\portal-build-%RANDOM%-%RANDOM%"
+"%PYTHON%" -m PyInstaller --noconfirm --distpath "%STAGING%" EmploymentPortalSearch.spec
 if errorlevel 1 (
   echo EXE build failed.
+  pause
+  exit /b 1
+)
+if exist "dist\EmploymentPortalSearch" (
+  move "dist\EmploymentPortalSearch" "dist\EmploymentPortalSearch.previous-%RANDOM%" >nul
+  if errorlevel 1 (
+    echo Close the old app before replacing it. New complete package: %STAGING%\EmploymentPortalSearch
+    pause
+    exit /b 1
+  )
+)
+if not exist dist mkdir dist
+robocopy "%STAGING%\EmploymentPortalSearch" "dist\EmploymentPortalSearch" /E /R:1 /W:1 /NFL /NDL /NJH /NJS /NP >nul
+if errorlevel 8 (
+  echo Copy failed. Complete package: %STAGING%\EmploymentPortalSearch
   pause
   exit /b 1
 )

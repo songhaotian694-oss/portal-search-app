@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
@@ -13,6 +14,9 @@ async def lifespan(app:FastAPI):
     try:
         yield
     finally:
+        pending=[module.task for module in (sync,process) if module.task and not module.task.done()]
+        for task in pending:task.cancel()
+        if pending:await asyncio.gather(*pending,return_exceptions=True)
         await auth.browser_session.close()
 app=FastAPI(title="就业分享信息检索",lifespan=lifespan)
 for r in [auth.router,sync.router,process.router,search.router,articles.router,export.router,settings.router,records.router,analytics.router]:app.include_router(r)

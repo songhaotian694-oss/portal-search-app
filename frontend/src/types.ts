@@ -4,6 +4,7 @@ export interface QueryToken {
   facet: Facet
   label: string
   value: string
+  sources?: string[]
 }
 
 export interface ExperienceRecord {

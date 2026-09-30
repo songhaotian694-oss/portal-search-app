@@ -30,7 +30,7 @@ export default function App() {
       try {
         const [sync, process] = await Promise.all([api.syncStatus(), api.processStatus()])
         if (cancelled) return
-        if (sync.status === 'failed' || process.status === 'failed') { setDataMessage(sync.status === 'failed' ? sync.message : process.message); return }
+        if (['failed', 'paused'].includes(sync.status) || ['failed', 'paused'].includes(process.status)) { setDataMessage(['failed', 'paused'].includes(sync.status) ? sync.message : process.message); return }
         if (sync.status === 'running' || process.status === 'running') {
           setDataMessage(process.status === 'running' ? `正在自动识别与整理 ${process.current}/${process.total || '—'}` : `正在首次获取学校资料 ${sync.current}/${sync.total || '—'}`)
           timer = window.setTimeout(() => { void monitor() }, 2500)

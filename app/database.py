@@ -53,6 +53,10 @@ class Database:
               id INTEGER PRIMARY KEY, article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
               chunk_no INTEGER, text TEXT, vector_json TEXT);
             CREATE TABLE IF NOT EXISTS app_metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS work_items (
+              kind TEXT NOT NULL,item_key TEXT NOT NULL,payload_json TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'pending',attempts INTEGER NOT NULL DEFAULT 0,
+              error TEXT NOT NULL DEFAULT '',updated_at TEXT,PRIMARY KEY(kind,item_key));
             ''')
             columns={row[1] for row in c.execute("PRAGMA table_info(experience_records)")}
             if "student_name" not in columns:c.execute("ALTER TABLE experience_records ADD COLUMN student_name TEXT")
@@ -63,6 +67,45 @@ class Database:
             return row[0] if row else None
     def set_metadata(self,key:str,value:str)->None:
         with self.connection() as c:c.execute('INSERT INTO app_metadata(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,value))
+    def checkpoint(self,kind:str)->dict|None:
+        value=self.metadata(kind+'_checkpoint')
+        return json.loads(value) if value else None
+    def save_checkpoint(self,kind:str,value:dict|None)->None:
+        self.set_metadata(kind+'_checkpoint',json.dumps(value,ensure_ascii=False))
+    def queue_work(self,kind:str,key:str,payload:dict)->None:
+        with self.connection() as c:c.execute('''INSERT INTO work_items(kind,item_key,payload_json,status,updated_at)
+            VALUES(?,?,?,'pending',?) ON CONFLICT(kind,item_key) DO UPDATE SET
+            payload_json=excluded.payload_json,status='pending',error='',updated_at=excluded.updated_at''',
+            (kind,key,json.dumps(payload,ensure_ascii=False),now()))
+    def stage_sync_page(self,payloads:list[dict],cursor:dict,progress:dict)->None:
+        """Commit discovered work and the next-page cursor atomically."""
+        with self.connection() as c:
+            for payload in payloads:
+                c.execute('''INSERT INTO work_items(kind,item_key,payload_json,status,updated_at)
+                    VALUES('sync',?,?,'pending',?) ON CONFLICT(kind,item_key) DO UPDATE SET
+                    payload_json=excluded.payload_json,status='pending',error='',updated_at=excluded.updated_at''',
+                    (payload['item']['detail_url'],json.dumps(payload,ensure_ascii=False),now()))
+            row=c.execute("SELECT value FROM app_metadata WHERE key='sync_checkpoint'").fetchone()
+            checkpoint=json.loads(row[0]) if row else None
+            if checkpoint:
+                checkpoint.update(cursor);checkpoint['progress']=dict(progress)
+                c.execute("UPDATE app_metadata SET value=? WHERE key='sync_checkpoint'",(json.dumps(checkpoint,ensure_ascii=False),))
+    def work_items(self,kind:str,statuses:tuple[str,...]=('pending','failed'))->list[dict]:
+        with self.connection() as c:
+            rows=c.execute('SELECT * FROM work_items WHERE kind=? AND status IN ('+','.join('?' for _ in statuses)+') ORDER BY updated_at,item_key',(kind,*statuses)).fetchall()
+            return [{**dict(row),'payload':json.loads(row['payload_json'])} for row in rows]
+    def finish_work(self,kind:str,key:str,error:str='')->None:
+        with self.connection() as c:c.execute('UPDATE work_items SET status=?,attempts=attempts+1,error=?,updated_at=? WHERE kind=? AND item_key=?',('failed' if error else 'done',error[:1000],now(),kind,key))
+    def unresolved_failures(self)->list[dict]:
+        with self.connection() as c:return [dict(row) for row in c.execute('SELECT * FROM failures WHERE resolved=0 ORDER BY id')]
+    def resolve_failures(self,url:str,stages:tuple[str,...])->None:
+        with self.connection() as c:c.execute('UPDATE failures SET resolved=1 WHERE url=? AND stage IN ('+','.join('?' for _ in stages)+')',(url,*stages))
+    def retry_failure(self,failure_id:int,error:str|None=None)->None:
+        with self.connection() as c:c.execute('UPDATE failures SET retry_count=retry_count+1,resolved=?,error=COALESCE(?,error) WHERE id=?',(int(error is None),error,failure_id))
+    def article_for_attachment(self,attachment_id:int)->int|None:
+        with self.connection() as c:
+            row=c.execute('SELECT article_id FROM attachments WHERE id=?',(attachment_id,)).fetchone()
+            return row[0] if row else None
     def upsert_article(self, item: dict[str, Any]) -> tuple[int, bool]:
         with self.connection() as c:
             row = c.execute("SELECT id,content_hash FROM articles WHERE detail_url=?", (item["detail_url"],)).fetchone()
@@ -80,7 +123,10 @@ class Database:
     def finish_job(self, job_id: int, status: str, fetched: int, success: int, failed: int, message: str = "") -> None:
         with self.connection() as c: c.execute("UPDATE sync_jobs SET ended_at=?,status=?,fetched_count=?,success_count=?,failure_count=?,message=? WHERE id=?",(now(),status,fetched,success,failed,message,job_id))
     def add_failure(self, job_id: int | None, url: str, stage: str, error: str) -> None:
-        with self.connection() as c: c.execute("INSERT INTO failures(job_id,url,stage,error,created_at) VALUES(?,?,?,?,?)",(job_id,url,stage,error[:1000],now()))
+        with self.connection() as c:
+            row=c.execute('SELECT id FROM failures WHERE url=? AND stage=? AND resolved=0 ORDER BY id DESC LIMIT 1',(url,stage)).fetchone()
+            if row:c.execute('UPDATE failures SET error=? WHERE id=?',(error[:1000],row[0]))
+            else:c.execute("INSERT INTO failures(job_id,url,stage,error,created_at) VALUES(?,?,?,?,?)",(job_id,url,stage,error[:1000],now()))
     def update_fts(self, article_id: int, title: str, content: str) -> None:
         with self.connection() as c:
             c.execute("DELETE FROM article_fts WHERE article_id=?", (article_id,)); c.execute("INSERT INTO article_fts(article_id,title,content) VALUES(?,?,?)", (article_id,fts_terms(title),fts_terms(content)))
@@ -116,25 +162,43 @@ class Database:
     def experience_rows(self,limit:int=10000)->list[dict[str,Any]]:
         with self.connection() as c:return [dict(x) for x in c.execute("""SELECT e.*,a.title,a.published_at,a.detail_url,a.collected_at
         FROM experience_records e JOIN articles a ON a.id=e.article_id ORDER BY a.published_at DESC,e.record_no LIMIT ?""",(limit,))]
-    def search_experience_rows(self,query:str="",filters:dict[str,str]|None=None,limit:int=50)->list[dict[str,Any]]:
+    def search_experience_rows(self,query:str="",filters:dict[str,str]|None=None,limit:int|None=50)->list[dict[str,Any]]:
+        from .processing.chinese_query import parse_query, variants
         filters=filters or {}
         fields=["student_name","graduation_year","grade","degree","major","city","employer","position"]
+        with self.connection() as c:
+            vocabulary={field:[row[0] for row in c.execute(f'SELECT DISTINCT {field} FROM experience_records WHERE {field} IS NOT NULL')] for field in ('student_name','employer','city','major','degree','position')}
+        plan=parse_query(query,vocabulary)
         sql="""SELECT e.*,a.title,a.published_at,a.detail_url,a.collected_at
         FROM experience_records e JOIN articles a ON a.id=e.article_id WHERE 1=1"""
         args=[]
         def like(value:str)->str:
             return "%"+value.replace("\\","\\\\").replace("%","\\%").replace("_","\\_")+"%"
-        for word in query.split():
-            sql+=" AND ("+" OR ".join(f"e.{field} LIKE ? ESCAPE '\\'" for field in fields)+" OR a.title LIKE ? ESCAPE '\\')"
-            args.extend([like(word)]*(len(fields)+1))
         for field in ["graduation_year","degree","major","city","position"]:
             if filters.get(field):
-                sql+=f" AND e.{field} LIKE ? ESCAPE '\\'";args.append(like(filters[field]))
-        if filters.get("date_from"):
-            sql+=" AND a.published_at>=?";args.append(filters["date_from"])
-        if filters.get("date_to"):
-            sql+=" AND a.published_at<=?";args.append(filters["date_to"])
-        sql+=" ORDER BY a.published_at DESC,e.record_no LIMIT ?";args.append(limit)
+                plan.include[field]=variants(field,filters[field])
+        for negative,groups in ((False,plan.include),(True,plan.exclude)):
+            for field,words in groups.items():
+                column='a.published_at' if field=='published_at' else f'e.{field}'
+                clauses=[f"{column} LIKE ? ESCAPE '\\'" for _ in words]
+                sql+=' AND '+('NOT ' if negative else '')+'('+' OR '.join(clauses)+')'
+                args.extend(like(word) for word in words)
+                if negative:sql+=f" AND {column} NOT IN ('','待人工核对','待核对','未提取')"
+        text_columns=[f'e.{field}' for field in fields]+['a.title','e.evidence_text']
+        for choices in plan.terms:
+            sql+=' AND ('+' OR '.join(f"{column} LIKE ? ESCAPE '\\'" for word in choices for column in text_columns)+')'
+            args.extend(like(word) for word in choices for column in text_columns)
+        for word in plan.excluded_terms:
+            sql+=' AND NOT ('+' OR '.join(f"COALESCE({column},'') LIKE ? ESCAPE '\\'" for column in text_columns)+')'
+            args.extend([like(word)]*len(text_columns))
+        date_from=filters.get('date_from') or plan.date_from
+        date_to=filters.get('date_to') or plan.date_to
+        if date_from:
+            sql+=" AND a.published_at>=?";args.append(date_from)
+        if date_to:
+            sql+=" AND substr(a.published_at,1,10)<=?";args.append(date_to)
+        sql+=" ORDER BY a.published_at DESC,e.record_no"
+        if limit is not None:sql+=' LIMIT ?';args.append(limit)
         with self.connection() as c:return [dict(x) for x in c.execute(sql,args)]
     def experience_city_examples(self,limit:int=6)->list[str]:
         with self.connection() as c:

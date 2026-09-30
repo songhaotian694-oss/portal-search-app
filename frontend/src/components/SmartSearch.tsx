@@ -20,7 +20,7 @@ export function SmartSearch({ initialValue = '', initialPriority = [], compact =
   function keyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); if (value.trim()) onSubmit(value.trim(), tokens.map(token => token.facet)) }
   }
-  function removeToken(token: QueryToken) { setValue(current => current.replace(token.value, '').replace(/\s{2,}/g, ' ').trim()) }
+  function removeToken(token: QueryToken) { setValue(current => (token.sources || [token.value]).reduce((text, source) => text.replaceAll(source, ''), current.normalize('NFKC')).replace(/\s{2,}/g, ' ').trim()) }
   function dropToken(target: string) {
     if (!dragging || dragging === target) return
     const order = tokens.map(token => token.facet)
